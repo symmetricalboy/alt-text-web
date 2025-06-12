@@ -1,11 +1,10 @@
 // FFmpeg-WASM v0.11.x Compression Worker
 // This worker handles video compression without blocking the main UI thread.
 
-// Load FFmpeg script immediately in the worker's global scope.
-// This ensures the FFmpeg object is defined before we try to use it.
-self.importScripts(`${self.location.origin}/assets/ffmpeg/ffmpeg.min.js`);
+// We do NOT import ffmpeg.min.js here as it contains document references
+// which are not available in a worker.
 
-// Now that the script is loaded, we can safely destructure from the FFmpeg object.
+// These will be defined when the main script loads them.
 const { createFFmpeg, fetchFile } = FFmpeg;
 let ffmpeg;
 
