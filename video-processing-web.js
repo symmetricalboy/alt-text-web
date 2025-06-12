@@ -76,55 +76,58 @@ window.VideoProcessing = {
         const outputFileName = 'output.mp4';
         
         try {
-            // Write input file to FFmpeg filesystem
             await ffmpeg.FS('writeFile', inputFileName, await fetchFile(videoFile));
-            
-            // Determine compression settings based on file size
+
             const fileSizeMB = videoFile.size / (1024 * 1024);
-            const codec = options.codec || this.getRecommendedCodec(fileSizeMB);
-            const quality = options.quality || (fileSizeMB > 50 ? 'low' : 'medium');
-            
-            // Build FFmpeg command based on codec and quality
-            let ffmpegArgs;
-            if (codec === 'h264') {
-                // More aggressive settings for large/high-fps videos
-                let crf, preset, videoFilter;
-                
-                if (fileSizeMB > 50) {
-                    // Very large files: aggressive compression + frame rate limiting + resolution limiting
-                    crf = 30;
-                    preset = 'ultrafast';
-                    videoFilter = 'fps=30,scale=min(iw\\,1280):min(ih\\,720):force_original_aspect_ratio=decrease,scale=trunc(iw/2/2)*2:trunc(ih/2/2)*2';
-                } else if (fileSizeMB > 20) {
-                    // Medium files: moderate compression + frame rate limiting
-                    crf = 28;
-                    preset = 'veryfast';
-                    videoFilter = 'fps=30,scale=trunc(iw/2/2)*2:trunc(ih/2/2)*2';
-                } else {
-                    // Small files: standard compression
-                    crf = quality === 'low' ? 28 : quality === 'medium' ? 26 : 24;
-                    preset = 'veryfast';
-                    videoFilter = 'scale=trunc(iw/2/2)*2:trunc(ih/2/2)*2';
-                }
-                
-                ffmpegArgs = [
+
+            // For very large files, extract a clip instead of a full, memory-intensive re-encode.
+            if (fileSizeMB > 50) {
+                console.log(`[VideoProcessing] File is very large (${fileSizeMB.toFixed(2)}MB). Extracting a 60-second clip.`);
+                const clipArgs = [
                     '-i', inputFileName,
-                    '-c:v', 'libx264',
-                    '-crf', crf.toString(),
-                    '-preset', preset,
-                    '-c:a', 'aac',
-                    '-b:a', '128k',
-                    '-vf', videoFilter,
-                    '-movflags', '+faststart', // Optimize for web playback
+                    '-t', '60', // Extract the first 60 seconds
+                    '-c', 'copy', // Copy streams without re-encoding
+                    '-movflags', '+faststart',
                     outputFileName
                 ];
+                await ffmpeg.run(...clipArgs);
             } else {
-                // Fallback to basic compression
-                ffmpegArgs = ['-i', inputFileName, '-c:v', 'libx264', '-c:a', 'aac', '-b:a', '128k', '-crf', '26', outputFileName];
+                // Existing compression logic for moderately sized files
+                const codec = options.codec || this.getRecommendedCodec(fileSizeMB);
+                const quality = options.quality || (fileSizeMB > 20 ? 'low' : 'medium');
+                
+                let ffmpegArgs;
+                if (codec === 'h264') {
+                    let crf, preset, videoFilter;
+                    
+                    if (fileSizeMB > 20) { // Was > 50, now > 20
+                        crf = 30;
+                        preset = 'ultrafast';
+                        videoFilter = 'fps=30,scale=min(iw\\,1280):min(ih\\,720):force_original_aspect_ratio=decrease,scale=trunc(iw/2/2)*2:trunc(ih/2/2)*2';
+                    } else {
+                        crf = quality === 'medium' ? 26 : 28;
+                        preset = 'veryfast';
+                        videoFilter = 'scale=trunc(iw/2/2)*2:trunc(ih/2/2)*2';
+                    }
+                    
+                    ffmpegArgs = [
+                        '-i', inputFileName,
+                        '-c:v', 'libx264',
+                        '-crf', crf.toString(),
+                        '-preset', preset,
+                        '-c:a', 'aac',
+                        '-b:a', '128k',
+                        '-vf', videoFilter,
+                        '-movflags', '+faststart',
+                        outputFileName
+                    ];
+                } else {
+                    ffmpegArgs = ['-i', inputFileName, '-c:v', 'libx264', '-c:a', 'aac', '-b:a', '128k', '-crf', '26', outputFileName];
+                }
+                
+                console.log(`[VideoProcessing] Running FFmpeg with codec: ${codec}, quality: ${quality}`);
+                await ffmpeg.run(...ffmpegArgs);
             }
-            
-            console.log(`[VideoProcessing] Running FFmpeg with codec: ${codec}, quality: ${quality}`);
-            await ffmpeg.run(...ffmpegArgs);
             
             // Reset progress handler
             ffmpeg.setProgress(() => {});
@@ -139,7 +142,7 @@ window.VideoProcessing = {
             
             const compressionRatio = ((videoFile.size - compressedBlob.size) / videoFile.size * 100).toFixed(1);
             
-            console.log(`[VideoProcessing] Compression complete! Size reduced by ${compressionRatio}%`);
+            console.log(`[VideoProcessing] Processing complete! Final size: ${(compressedBlob.size / 1024 / 1024).toFixed(2)}MB. Reduction: ${compressionRatio}%`);
             
             return {
                 blob: compressedBlob,
