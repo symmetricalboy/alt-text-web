@@ -41,24 +41,37 @@ h1 {
     font-size: 1.1rem;
 }
 
-.container {
+main.container {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.main-content {
     display: flex;
     flex-direction: column;
     gap: 2rem;
 }
 
 @media (min-width: 768px) {
-    .container {
+    .main-content {
         flex-direction: row;
     }
 }
 
-.upload-section, .result-section, .log-section {
+.upload-section, .result-section {
     flex: 1;
     padding: 1.5rem;
     background-color: white;
     border-radius: 8px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.log-section {
+    padding: 1.5rem;
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 }
 
 .upload-section {

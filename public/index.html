@@ -16,11 +16,72 @@
     <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
-    <div id="ffmpeg-status">Loading FFmpeg...</div>
-    <p>Copyright © 2025 Dylan Gregori Singer (symmetricalboy)</p>
+    <header>
+        <h1>Bluesky Alt Text Generator</h1>
+        <p class="subtitle">Automatically generate detailed, accessible alt text for your Bluesky images & videos using Google Gemini AI.</p>
+    </header>
+
+    <main class="container">
+        <div class="main-content">
+            <section class="upload-section">
+                <div id="drop-area" class="upload-area">
+                    <div class="upload-icon">📷</div>
+                    <h3>Upload Media</h3>
+                    <p>Drag & drop an image/video here or click to browse</p>
+                    <input type="file" id="file-input" hidden accept="image/*,video/*">
+                </div>
+                <div class="preview-container" style="display: none;">
+                    <h3>Preview</h3>
+                    <!-- Preview will be inserted here -->
+                </div>
+                <div class="button-group">
+                    <button id="generate-btn" disabled>Generate Alt Text</button>
+                    <button id="caption-btn" class="btn-secondary" style="display: none;">Generate Captions</button>
+                </div>
+            </section>
+            
+            <section class="result-section">
+                <h2>Generated Alt Text</h2>
+                <div class="status-box" id="status-message" style="margin-bottom: 10px; color: #666; font-size: 0.9rem; display: none;">
+                    Processing... Please wait.
+                </div>
+                <div class="result-box" id="result">
+                    <p style="color: #666;">Generated alt text will appear here...</p>
+                </div>
+                <div class="button-group">
+                    <button id="copy-btn" class="btn-secondary" disabled>Copy to Clipboard</button>
+                </div>
+            </section>
+        </div>
+
+        <section class="log-section">
+            <h2>Processing Logs</h2>
+            <div id="log-container" class="log-box"></div>
+        </section>
+    </main>
+    
+    <footer>
+        <p>Also available as a <a href="https://github.com/symmetricalboy/gen-alt-text" target="_blank">browser extension</a>!</p>
+        <p>Feedback, suggestions, assistance, & updates at <a href="https://bsky.app/profile/symm.app" target="_blank">@symm.app</a></p>
+        <p>Free & <a href="https://github.com/symmetricalboy/gen-alt-text" target="_blank">open source</a>, for all, forever.</p>
+        <p>Copyright © 2025 Dylan Gregori Singer (symmetricalboy)</p>
     </footer>
     
+    <div id="ffmpeg-status"></div>
     <script src="/js/main.js"></script>
-    
-    <!-- Service Worker Registration -->
-    <script> 
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/service-worker.js').then(registration => {
+                    console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                }, err => {
+                    console.log('ServiceWorker registration failed: ', err);
+                });
+            });
+        }
+        // Make the drop area trigger the file input
+        document.getElementById('drop-area').addEventListener('click', () => {
+            document.getElementById('file-input').click();
+        });
+    </script>
+</body></html> 
