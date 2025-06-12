@@ -1,0 +1,16 @@
+{
+  "name": "alt-text-web",
+  "version": "1.0.0",
+  "description": "Web client for generating alt text, designed for Railway deployment.",
+  "main": "index.html",
+  "scripts": {
+    "start": "serve -p $PORT",
+    "dev": "serve"
+  },
+  "dependencies": {
+    "serve": "^14.2.3"
+  },
+  "engines": {
+    "node": "18"
+  }
+} 
