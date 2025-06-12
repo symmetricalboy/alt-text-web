@@ -59,9 +59,15 @@ window.addEventListener('load', initializeFFmpeg);
 
 // Global VideoProcessing object for the main page
 window.VideoProcessing = {
-    async compressVideo(videoFile, options = {}) {
+    async compressVideo(videoFile, options = {}, onProgress) {
         if (!ffmpeg || !ffmpeg.isLoaded()) {
             throw new Error('FFmpeg is not loaded yet. Please wait for initialization.');
+        }
+
+        if (typeof onProgress === 'function') {
+            ffmpeg.setProgress(({ ratio }) => {
+                onProgress({ ratio });
+            });
         }
 
         console.log(`[VideoProcessing] Starting compression of ${videoFile.name} (${(videoFile.size / 1024 / 1024).toFixed(2)}MB)`);
@@ -103,24 +109,24 @@ window.VideoProcessing = {
                 
                 ffmpegArgs = [
                     '-i', inputFileName,
+                    '-an', // No audio processing
                     '-c:v', 'libx264',
                     '-crf', crf.toString(),
                     '-preset', preset,
-                    '-c:a', 'aac',
-                    '-b:a', '128k',
                     '-vf', videoFilter,
-                    '-threads', '1',
-                    '-x264-params', 'threads=1:sliced-threads=0',
                     '-movflags', '+faststart', // Optimize for web playback
                     outputFileName
                 ];
             } else {
                 // Fallback to basic compression
-                ffmpegArgs = ['-i', inputFileName, '-c:v', 'libx264', '-crf', '26', outputFileName];
+                ffmpegArgs = ['-i', inputFileName, '-an', '-c:v', 'libx264', '-crf', '26', outputFileName];
             }
             
             console.log(`[VideoProcessing] Running FFmpeg with codec: ${codec}, quality: ${quality}`);
             await ffmpeg.run(...ffmpegArgs);
+            
+            // Reset progress handler
+            ffmpeg.setProgress(() => {});
             
             // Read the compressed file
             const data = ffmpeg.FS('readFile', outputFileName);
@@ -152,6 +158,8 @@ window.VideoProcessing = {
             } catch (cleanupError) {
                 // Ignore cleanup errors
             }
+            // Reset progress handler on error too
+            ffmpeg.setProgress(() => {});
             throw error;
         }
     },

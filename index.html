@@ -440,16 +440,20 @@
 
                 // If file is large and video, compress it first
                 if (fileToProcess.size > SINGLE_FILE_UPLOAD_LIMIT && fileToProcess.type.startsWith('video/')) {
-                    updateStatus('Large video detected. Compressing for processing...', false);
+                    updateStatus('Large video detected. Compressing for processing... 0%', false);
                     
                     const compressionResult = await VideoProcessing.compressVideo(
                         fileToProcess,
                         {
-                            codec: VideoProcessing.getRecommendedCodec(fileToProcess.size / (1024 * 1024)),
-                            quality: 'medium',
+                            codec: VideoProcessing.getRecommendedCodec(fileToProcess.size / (1024 / 1024)),
                             maxSizeMB: MAX_COMPRESSION_TARGET_MB
                         },
-                        (message) => updateStatus(message, false)
+                        (progress) => {
+                            const percent = Math.round(progress.ratio * 100);
+                            if (percent < 100) {
+                                updateStatus(`Compressing large video... ${percent}%`, false);
+                            }
+                        }
                     );
 
                     if (compressionResult && compressionResult.compressedSize <= (MAX_COMPRESSION_TARGET_MB * 1024 * 1024)) {
