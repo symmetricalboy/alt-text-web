@@ -20,6 +20,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Current file data
     let originalFile = null;
     let currentMediaElement = null;
+    
+    // FFmpeg instance for compression
+    let ffmpeg = null;
+    let ffmpegLoaded = false;
 
     // Event Listeners
     fileInput.addEventListener('change', handleFileSelect);
@@ -83,6 +87,122 @@ document.addEventListener('DOMContentLoaded', () => {
         statusElement.style.color = isError ? 'var(--error-color)' : '#666';
         statusElement.style.display = message ? 'block' : 'none';
         logToUI(message);
+    }
+
+    // FFmpeg initialization and loading
+    async function loadFFmpeg() {
+        if (ffmpegLoaded) {
+            logToUI('FFmpeg is already loaded.');
+            return ffmpeg;
+        }
+        
+        try {
+            logToUI('Loading FFmpeg...');
+            const { createFFmpeg, fetchFile } = FFmpeg;
+            
+            ffmpeg = createFFmpeg({
+                corePath: `${window.location.origin}/assets/ffmpeg/ffmpeg-core.js`,
+                log: true,
+                logger: ({ type, message }) => {
+                    if (type === 'fferr') {
+                        logToUI(`[FFmpeg]: ${message}`);
+                    }
+                },
+                progress: (progress) => {
+                    const percent = Math.round(progress.ratio * 100);
+                    if (percent < 100) {
+                        updateStatus(`Compressing video... ${percent}%`, false);
+                    }
+                },
+            });
+            
+            await ffmpeg.load();
+            ffmpegLoaded = true;
+            logToUI('FFmpeg loaded successfully!');
+            return { ffmpeg, fetchFile };
+        } catch (error) {
+            logToUI(`Error loading FFmpeg: ${error.message}`);
+            throw error;
+        }
+    }
+    
+    // Compression handler for worker-proxied requests
+    async function handleCompression(fileData) {
+        try {
+            logToUI('Main thread received file for compression');
+            
+            const { ffmpeg, fetchFile } = await loadFFmpeg();
+            
+            const { buffer, name, size, type } = fileData;
+            const originalSizeMB = (size / 1024 / 1024).toFixed(2);
+            logToUI(`Starting compression of ${name} (${originalSizeMB}MB)`);
+            
+            // Convert ArrayBuffer to Uint8Array for FFmpeg
+            const fileBytes = new Uint8Array(buffer);
+            ffmpeg.FS('writeFile', name, fileBytes);
+            
+            // Tiered compression settings
+            const qualitySettings = {
+                codec: 'libx264',
+                crf: 28, // Medium quality
+                preset: 'veryfast',
+                audioBitrate: '128k',
+                movflags: '+faststart',
+                vf: []
+            };
+            
+            if (size > 50 * 1024 * 1024) { // > 50MB
+                logToUI('Very large file, using aggressive compression.');
+                qualitySettings.crf = 32; // Lower quality, smaller size
+                qualitySettings.preset = 'ultrafast';
+                qualitySettings.vf.push('fps=30'); // Cap framerate
+                qualitySettings.vf.push('scale=min(iw\\,1280):min(ih\\,720):force_original_aspect_ratio=decrease');
+            } else if (size > 20 * 1024 * 1024) { // > 20MB
+                logToUI('Large file, using stronger compression.');
+                qualitySettings.crf = 30;
+                qualitySettings.preset = 'faster';
+                qualitySettings.vf.push('scale=min(iw\\,1920):min(ih\\,1080):force_original_aspect_ratio=decrease');
+            }
+            
+            // Ensure dimensions are divisible by 2 for H.264
+            qualitySettings.vf.push('scale=trunc(iw/2)*2:trunc(ih/2)*2');
+            
+            const ffmpegArgs = [
+                '-i', name,
+                '-c:v', qualitySettings.codec,
+                '-crf', qualitySettings.crf.toString(),
+                '-preset', qualitySettings.preset,
+                '-c:a', 'aac',
+                '-b:a', qualitySettings.audioBitrate,
+            ];
+            
+            if (qualitySettings.vf.length > 0) {
+                ffmpegArgs.push('-vf', qualitySettings.vf.join(','));
+            }
+            
+            ffmpegArgs.push('-movflags', qualitySettings.movflags, 'output.mp4');
+            
+            logToUI(`Running FFmpeg command: ${ffmpegArgs.join(' ')}`);
+            
+            await ffmpeg.run(...ffmpegArgs);
+            
+            const data = ffmpeg.FS('readFile', 'output.mp4');
+            const compressedBlob = new Blob([data.buffer], { type: 'video/mp4' });
+            
+            logToUI(`FFmpeg processing finished. Original size: ${originalSizeMB}MB, Compressed size: ${(compressedBlob.size / 1024 / 1024).toFixed(2)}MB`);
+            
+            // Cleanup filesystem
+            ffmpeg.FS('unlink', name);
+            ffmpeg.FS('unlink', 'output.mp4');
+            
+            return {
+                blob: compressedBlob,
+                originalSize: size
+            };
+        } catch (error) {
+            logToUI(`Compression error in main thread: ${error.message}`);
+            throw error;
+        }
     }
 
     // File handling
@@ -205,6 +325,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 fileToProcess = await new Promise((resolve, reject) => {
                     compressionWorker.onmessage = (event) => {
                         const { type, data } = event.data;
+                        
                         if (type === 'log') {
                             logToUI(`[Worker]: ${data}`);
                         } else if (type === 'progress') {
@@ -212,9 +333,29 @@ document.addEventListener('DOMContentLoaded', () => {
                             if (percent < 100) {
                                 updateStatus(`Compressing large video... ${percent}%`, false);
                             }
+                        } else if (type === 'proxy_compress') {
+                            // Worker is asking the main thread to do the FFmpeg compression
+                            logToUI('Worker requested main thread to handle compression');
+                            
+                            // Process the compression in the main thread and send back the result
+                            handleCompression(data)
+                                .then(result => {
+                                    compressionWorker.postMessage({
+                                        type: 'compressed_result',
+                                        data: result
+                                    });
+                                })
+                                .catch(error => {
+                                    compressionWorker.postMessage({
+                                        type: 'error',
+                                        data: { message: error.message }
+                                    });
+                                    reject(error);
+                                });
+                            
                         } else if (type === 'result') {
                             const compressedBlob = data.blob;
-                            logToUI(`Compression successful. New size: ${(compressedBlob.size / 1024 / 1024).toFixed(2)}MB`);
+                            logToUI(`Compression successful. Original: ${(data.originalSize / 1024 / 1024).toFixed(2)}MB, New: ${(compressedBlob.size / 1024 / 1024).toFixed(2)}MB`);
                             updateStatus('Compression complete. Processing...', false);
                             resolve(new File([compressedBlob], originalFile.name, { type: compressedBlob.type }));
                             compressionWorker.terminate();
@@ -225,7 +366,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     };
 
-                    compressionWorker.postMessage({ file: originalFile });
+                    compressionWorker.postMessage({ 
+                        type: 'compress', 
+                        data: { file: originalFile } 
+                    });
                 });
             }
 
