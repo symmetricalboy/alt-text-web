@@ -109,17 +109,18 @@ window.VideoProcessing = {
                 
                 ffmpegArgs = [
                     '-i', inputFileName,
-                    '-an', // No audio processing
                     '-c:v', 'libx264',
                     '-crf', crf.toString(),
                     '-preset', preset,
+                    '-c:a', 'aac',
+                    '-b:a', '128k',
                     '-vf', videoFilter,
                     '-movflags', '+faststart', // Optimize for web playback
                     outputFileName
                 ];
             } else {
                 // Fallback to basic compression
-                ffmpegArgs = ['-i', inputFileName, '-an', '-c:v', 'libx264', '-crf', '26', outputFileName];
+                ffmpegArgs = ['-i', inputFileName, '-c:v', 'libx264', '-c:a', 'aac', '-b:a', '128k', '-crf', '26', outputFileName];
             }
             
             console.log(`[VideoProcessing] Running FFmpeg with codec: ${codec}, quality: ${quality}`);
