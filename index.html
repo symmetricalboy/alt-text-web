@@ -411,7 +411,7 @@
 
             // Reset result and status
             resultBox.innerHTML = '<p style="color: #666;">Click "Generate Alt Text" to analyze this media...</p>';
-            updateStatus('', false);
+            document.getElementById('status-message').style.display = 'none';
             copyBtn.disabled = true;
             
             logToUI(`Selected file: <strong>${file.name}</strong>, type: ${file.type}, size: ${(file.size / (1024 / 1024)).toFixed(2)}MB`);
@@ -424,7 +424,7 @@
                 captionBtn.style.display = 'none';
             }
             
-            updateStatus('Ready to process.', false);
+            logToUI('Ready to process.');
         }
         
         // Main processing logic
