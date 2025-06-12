@@ -4,11 +4,10 @@
   "description": "Web client for generating alt text, designed for Railway deployment.",
   "main": "index.html",
   "scripts": {
-    "start": "serve -p $PORT",
-    "dev": "serve"
+    "start": "node server.js"
   },
   "dependencies": {
-    "serve": "^14.2.3"
+    "express": "^4.18.2"
   },
   "engines": {
     "node": "18"
