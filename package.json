@@ -2,7 +2,7 @@
   "name": "alt-text-web",
   "version": "1.0.0",
   "description": "Web client for generating alt text, designed for Railway deployment.",
-  "main": "index.html",
+  "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
