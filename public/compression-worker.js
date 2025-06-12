@@ -1,33 +1,49 @@
-// Set up FFmpeg-WASM
-// Using v0.11.0 as it's required for some environments
-self.importScripts('/assets/ffmpeg/ffmpeg.min.js');
+// FFmpeg-WASM v0.11.x Compression Worker
+// This worker handles video compression without blocking the main UI thread.
 
+// Note: We don't use importScripts() here because createFFmpeg handles its own loading.
 const { createFFmpeg, fetchFile } = FFmpeg;
 let ffmpeg;
 
 async function initializeFFmpeg() {
     if (ffmpeg && ffmpeg.isLoaded()) {
-        postMessage({ type: 'log', data: 'FFmpeg already loaded.' });
+        postMessage({ type: 'log', data: 'FFmpeg is already loaded.' });
         return;
     }
-    postMessage({ type: 'log', data: 'Initializing FFmpeg v0.11.x...' });
+    postMessage({ type: 'log', data: 'Initializing FFmpeg v0.11.x in worker...' });
 
-    ffmpeg = createFFmpeg({
-        corePath: `${self.location.origin}/assets/ffmpeg/ffmpeg-core.js`,
-        log: true,
-        logger: ({ type, message }) => {
-            // Filter out routine stdout messages, we only want stderr for actual logs
-            if (type === 'fferr') {
-                 postMessage({ type: 'log', data: `[FFmpeg]: ${message}` });
-            }
-        },
-        progress: (progress) => {
-            postMessage({ type: 'progress', data: progress });
-        },
-    });
+    // Use a try-catch block for robust initialization
+    try {
+        // Dynamically load the main FFmpeg script if it's not already available
+        if (typeof FFmpeg === 'undefined') {
+            self.importScripts(`${self.location.origin}/assets/ffmpeg/ffmpeg.min.js`);
+        }
+        
+        const { createFFmpeg, fetchFile } = FFmpeg;
 
-    await ffmpeg.load();
-    postMessage({ type: 'log', data: 'FFmpeg loaded successfully.' });
+        ffmpeg = createFFmpeg({
+            corePath: `${self.location.origin}/assets/ffmpeg/ffmpeg-core.js`,
+            // IMPORTANT: This is the key change for Web Worker compatibility
+            workerPath: `${self.location.origin}/assets/ffmpeg/ffmpeg-core.worker.js`,
+            log: true,
+            logger: ({ type, message }) => {
+                if (type === 'fferr') { // Only log actual errors/info from stderr
+                    postMessage({ type: 'log', data: `[FFmpeg]: ${message}` });
+                }
+            },
+            progress: (progress) => {
+                postMessage({ type: 'progress', data: progress });
+            },
+        });
+
+        await ffmpeg.load();
+        postMessage({ type: 'log', data: 'FFmpeg loaded successfully in worker.' });
+
+    } catch (error) {
+        postMessage({ type: 'error', data: { message: `FFmpeg initialization failed: ${error.message}` } });
+        // Prevent further attempts if initialization fails
+        ffmpeg = null; 
+    }
 }
 
 async function compressVideo(file) {
@@ -100,9 +116,15 @@ async function compressVideo(file) {
 
     } catch (error) {
         postMessage({ type: 'error', data: { message: `Compression failed: ${error.message}` } });
+        // Attempt to clean up even if there's an error
+        try {
+            ffmpeg.FS('unlink', file.name);
+            ffmpeg.FS('unlink', 'output.mp4');
+        } catch (e) {
+            // Ignore cleanup errors
+        }
     }
 }
-
 
 self.onmessage = async (event) => {
     const { file } = event.data;
