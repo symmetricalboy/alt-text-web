@@ -262,7 +262,8 @@
     <script>
         // Configuration
         const CLOUD_FUNCTION_URL = 'https://alttextserver.symm.app/generate-alt-text';
-        const MAX_FILE_SIZE_MB = 19; // Max file size for direct processing
+        const SINGLE_FILE_UPLOAD_LIMIT = 19 * 1024 * 1024; // 19MB for individual processed files
+        const TOTAL_MEDIA_SIZE_LIMIT = 100 * 1024 * 1024; // 100MB total for original media file
         const MAX_COMPRESSION_TARGET_MB = 25; // Target for compressed files
 
         // DOM Elements
@@ -445,12 +446,12 @@
                         {
                             codec: VideoProcessing.getRecommendedCodec(fileToProcess.size / (1024 * 1024)),
                             quality: 'medium',
-                            maxSizeMB: SINGLE_FILE_UPLOAD_LIMIT / (1024 * 1024)
+                            maxSizeMB: MAX_COMPRESSION_TARGET_MB
                         },
                         (message) => updateStatus(message, false)
                     );
 
-                    if (compressionResult && compressionResult.compressedSize <= SINGLE_FILE_UPLOAD_LIMIT) {
+                    if (compressionResult && compressionResult.compressedSize <= (MAX_COMPRESSION_TARGET_MB * 1024 * 1024)) {
                         fileToProcess = new File([compressionResult.blob], originalFile.name, { type: compressionResult.blob.type });
                         updateStatus(`Compression complete: ${compressionResult.compressionRatio.toFixed(1)}% reduction. Processing...`, false);
                         showToast(`Compressed from ${(compressionResult.originalSize / (1024 * 1024)).toFixed(1)}MB to ${(compressionResult.compressedSize / (1024 * 1024)).toFixed(1)}MB`, 'success');
