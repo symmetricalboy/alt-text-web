@@ -1,6 +1,6 @@
 // Set up FFmpeg-WASM
 // Using v0.11.0 as it's required for some environments
-self.importScripts('https://unpkg.com/@ffmpeg/ffmpeg@0.11.0/dist/ffmpeg.min.js');
+self.importScripts('/assets/ffmpeg/ffmpeg.min.js');
 
 const { createFFmpeg, fetchFile } = FFmpeg;
 let ffmpeg;
