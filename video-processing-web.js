@@ -76,7 +76,9 @@ window.VideoProcessing = {
         const outputFileName = 'output.mp4';
         
         try {
-            await ffmpeg.FS('writeFile', inputFileName, await fetchFile(videoFile));
+            // Use a streaming approach to write the file to avoid memory crashes
+            const fileData = await new Response(videoFile).arrayBuffer();
+            await ffmpeg.FS('writeFile', inputFileName, new Uint8Array(fileData));
 
             const fileSizeMB = videoFile.size / (1024 * 1024);
             const codec = options.codec || this.getRecommendedCodec(fileSizeMB);
@@ -119,9 +121,22 @@ window.VideoProcessing = {
             }
             
             console.log(`[VideoProcessing] Running FFmpeg with codec: ${codec}, quality: ${quality}, CRF: ${ffmpegArgs[ffmpegArgs.indexOf('-crf') + 1]}`);
+            
+            ffmpeg.setLogger(({ type, message }) => {
+                if (type === 'fferr') {
+                    // Log FFmpeg's stderr output to the UI log
+                    if (window.logToUI) {
+                        window.logToUI(`[FFmpeg]: ${message}`);
+                    } else {
+                        console.log(`[FFmpeg]: ${message}`);
+                    }
+                }
+            });
+
             await ffmpeg.run(...ffmpegArgs);
             
-            // Reset progress handler
+            // Reset logger and progress handler
+            ffmpeg.setLogger(() => {});
             ffmpeg.setProgress(() => {});
             
             // Read the compressed file
@@ -154,7 +169,8 @@ window.VideoProcessing = {
             } catch (cleanupError) {
                 // Ignore cleanup errors
             }
-            // Reset progress handler on error too
+            // Reset logger and progress handler on error too
+            ffmpeg.setLogger(() => {});
             ffmpeg.setProgress(() => {});
             throw error;
         }
