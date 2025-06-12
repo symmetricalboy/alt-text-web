@@ -415,7 +415,7 @@
             document.getElementById('status-message').style.display = 'none';
             copyBtn.disabled = true;
             
-            logToUI(`Selected file: <strong>${file.name}</strong>, type: ${file.type}, size: ${(file.size / (1024 / 1024)).toFixed(2)}MB`);
+            logToUI(`Selected file: <strong>${file.name}</strong>, type: ${file.type}, size: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
             
             // Enable/disable buttons
             generateBtn.disabled = false;
@@ -459,33 +459,36 @@
 
                 // If file is large and video, compress it first
                 if (fileToProcess.size > SINGLE_FILE_UPLOAD_LIMIT && fileToProcess.type.startsWith('video/')) {
-                    logToUI('Large video detected. Preparing for compression.');
-                    updateStatus('Large video detected. Compressing for processing... 0%', false);
+                    logToUI('Large video detected. Offloading to compression worker.');
+                    updateStatus('Compressing large video... 0%', false);
                     
-                    const compressionResult = await VideoProcessing.compressVideo(
-                        fileToProcess,
-                        {
-                            codec: VideoProcessing.getRecommendedCodec(fileToProcess.size / (1024 / 1024)),
-                            maxSizeMB: MAX_COMPRESSION_TARGET_MB
-                        },
-                        (progress) => {
-                            const percent = Math.round(progress.ratio * 100);
-                            if (percent < 100) {
-                                const progressMessage = `Compressing large video... ${percent}%`;
-                                document.getElementById('status-message').textContent = progressMessage;
+                    const compressionWorker = new Worker('compression-worker.js');
+                    
+                    fileToProcess = await new Promise((resolve, reject) => {
+                        compressionWorker.onmessage = (event) => {
+                            const { type, data } = event.data;
+                            if (type === 'log') {
+                                logToUI(`[Worker]: ${data}`);
+                            } else if (type === 'progress') {
+                                const percent = Math.round(data.ratio * 100);
+                                if (percent < 100) {
+                                    updateStatus(`Compressing large video... ${percent}%`, false);
+                                }
+                            } else if (type === 'result') {
+                                const compressedBlob = data.blob;
+                                logToUI(`Compression successful. New size: ${(compressedBlob.size / 1024 / 1024).toFixed(2)}MB`);
+                                updateStatus('Compression complete. Processing...', false);
+                                resolve(new File([compressedBlob], originalFile.name, { type: compressedBlob.type }));
+                                compressionWorker.terminate();
+                            } else if (type === 'error') {
+                                logToUI(`<strong>[Worker Error]:</strong> ${data.message}`);
+                                reject(new Error(data.message));
+                                compressionWorker.terminate();
                             }
-                        }
-                    );
+                        };
 
-                    if (compressionResult && compressionResult.compressedSize <= (MAX_COMPRESSION_TARGET_MB * 1024 * 1024)) {
-                        fileToProcess = new File([compressionResult.blob], originalFile.name, { type: compressionResult.blob.type });
-                        logToUI(`Compression successful. New size: ${(fileToProcess.size / 1024 / 1024).toFixed(2)}MB`);
-                        updateStatus(`Compression complete. Processing...`, false);
-                        showToast(`Compressed from ${(compressionResult.originalSize / (1024 * 1024)).toFixed(1)}MB to ${(compressionResult.compressedSize / (1024 * 1024)).toFixed(1)}MB`, 'success');
-                    } else {
-                        logToUI('Compression failed to reduce file size sufficiently. Aborting.');
-                        throw new Error('Compression failed to reduce file size sufficiently');
-                    }
+                        compressionWorker.postMessage({ file: originalFile });
+                    });
                 }
 
                 // Process the file (original or compressed)
