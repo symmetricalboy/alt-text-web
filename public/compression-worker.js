@@ -1,7 +1,11 @@
 // FFmpeg-WASM v0.11.x Compression Worker
 // This worker handles video compression without blocking the main UI thread.
 
-// Note: We don't use importScripts() here because createFFmpeg handles its own loading.
+// Load FFmpeg script immediately in the worker's global scope.
+// This ensures the FFmpeg object is defined before we try to use it.
+self.importScripts(`${self.location.origin}/assets/ffmpeg/ffmpeg.min.js`);
+
+// Now that the script is loaded, we can safely destructure from the FFmpeg object.
 const { createFFmpeg, fetchFile } = FFmpeg;
 let ffmpeg;
 
@@ -14,13 +18,6 @@ async function initializeFFmpeg() {
 
     // Use a try-catch block for robust initialization
     try {
-        // Dynamically load the main FFmpeg script if it's not already available
-        if (typeof FFmpeg === 'undefined') {
-            self.importScripts(`${self.location.origin}/assets/ffmpeg/ffmpeg.min.js`);
-        }
-        
-        const { createFFmpeg, fetchFile } = FFmpeg;
-
         ffmpeg = createFFmpeg({
             corePath: `${self.location.origin}/assets/ffmpeg/ffmpeg-core.js`,
             // IMPORTANT: This is the key change for Web Worker compatibility
