@@ -20,7 +20,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const logContainer = document.getElementById('log-container');
     
     // New elements
-    const themeToggle = document.getElementById('theme-toggle');
     const progressContainer = document.getElementById('progress-container');
     const progressFill = document.getElementById('progress-fill');
     const progressText = document.getElementById('progress-text');
@@ -50,32 +49,23 @@ document.addEventListener('DOMContentLoaded', () => {
     let ffmpegLoaded = false;
 
     // ===== THEME MANAGEMENT =====
+    // Theme handling function for inline HTML usage
+    window.handleThemeToggle = function(checkbox) {
+        const theme = checkbox.checked ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-theme', theme);
+        localStorage.setItem('theme', theme);
+        logToUI(`🎨 Switched to ${theme} mode`);
+    };
+
+    // Initialize theme on page load
     function initializeTheme() {
         const savedTheme = localStorage.getItem('theme') || 'light';
+        const checkbox = document.getElementById('theme-toggle-checkbox');
+        
         document.documentElement.setAttribute('data-theme', savedTheme);
-        updateThemeToggle(savedTheme);
-    }
-
-    function updateThemeToggle(theme) {
-        const themeIcon = themeToggle.querySelector('.theme-icon');
-        const themeText = themeToggle.querySelector('.theme-text');
-        
-        if (theme === 'dark') {
-            themeIcon.className = 'theme-icon fas fa-moon';
-            themeText.textContent = 'Dark';
-        } else {
-            themeIcon.className = 'theme-icon fas fa-sun';
-            themeText.textContent = 'Light';
+        if (checkbox) {
+            checkbox.checked = savedTheme === 'dark';
         }
-    }
-
-    function toggleTheme() {
-        const currentTheme = document.documentElement.getAttribute('data-theme');
-        const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-        
-        document.documentElement.setAttribute('data-theme', newTheme);
-        localStorage.setItem('theme', newTheme);
-        updateThemeToggle(newTheme);
     }
 
     // ===== SETTINGS MANAGEMENT =====
@@ -195,8 +185,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ===== EVENT LISTENERS =====
     
-    // Theme toggle
-    themeToggle.addEventListener('click', toggleTheme);
+    // Theme toggle is handled inline in HTML
     
     // Settings
     optionAltText.addEventListener('change', saveSettings);
@@ -380,25 +369,52 @@ document.addEventListener('DOMContentLoaded', () => {
             const base64Data = await fileToBase64(processedFile);
             updateProgress(80, 'Generating content...');
             
-            // Make API request
-            const response = await fetch(CLOUD_FUNCTION_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    base64Data: base64Data,  // Fixed: server expects 'base64Data'
-                    mimeType: processedFile.type,  // Fixed: added required 'mimeType' 
-                    filename: originalFile.name,
-                    generateCaptions: settings.captions,
-                    fileSize: originalFile.size
-                })
-            });
+            let result = {};
             
-            if (!response.ok) {
-                throw new Error(`Server error: ${response.status} ${response.statusText}`);
+            // Generate alt text if requested
+            if (settings.altText) {
+                const altTextResponse = await fetch(CLOUD_FUNCTION_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        base64Data: base64Data,
+                        mimeType: processedFile.type,
+                        filename: originalFile.name,
+                        fileSize: originalFile.size
+                    })
+                });
+                
+                if (!altTextResponse.ok) {
+                    throw new Error(`Alt text generation failed: ${altTextResponse.status} ${altTextResponse.statusText}`);
+                }
+                
+                const altTextResult = await altTextResponse.json();
+                result.altText = altTextResult.altText;
             }
             
-            updateProgress(95, 'Processing results...');
-            const result = await response.json();
+            // Generate captions if requested
+            if (settings.captions && processedFile.type.startsWith('video/')) {
+                updateProgress(85, 'Generating captions...');
+                
+                const captionsResponse = await fetch(CLOUD_FUNCTION_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'generateCaptions',
+                        base64Data: base64Data,
+                        mimeType: processedFile.type,
+                        filename: originalFile.name,
+                        fileSize: originalFile.size
+                    })
+                });
+                
+                if (!captionsResponse.ok) {
+                    throw new Error(`Caption generation failed: ${captionsResponse.status} ${captionsResponse.statusText}`);
+                }
+                
+                const captionsResult = await captionsResponse.json();
+                result.vttContent = captionsResult.vttContent;
+            }
             
             updateProgress(100, 'Complete!');
             hideProgress();
@@ -433,10 +449,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         
-        if (settings.captions && result.captions) {
-            displayText += `🎥 Captions:\n${result.captions}\n\n`;
+        if (settings.captions && result.vttContent) {
+            displayText += `🎥 Captions:\n${result.vttContent}\n\n`;
             downloadData = {
-                content: result.captions,
+                content: result.vttContent,
                 filename: `${originalFile.name.split('.')[0]}_captions.vtt`,
                 type: 'text/vtt'
             };
