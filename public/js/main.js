@@ -299,6 +299,14 @@ document.addEventListener('DOMContentLoaded', () => {
         
         previewContainer.innerHTML = `<h3>Preview</h3>${previewHtml}`;
         currentMediaElement = document.getElementById('preview');
+        
+        // For videos, detect duration when metadata loads
+        if (file.type.startsWith('video/')) {
+            currentMediaElement.addEventListener('loadedmetadata', () => {
+                originalFile.videoDuration = currentMediaElement.duration;
+                logToUI(`🎥 Video duration detected: ${currentMediaElement.duration.toFixed(1)} seconds`);
+            });
+        }
         generateBtn.disabled = false;
         
         // Validate file size
@@ -403,6 +411,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         action: 'generateCaptions',
                         base64Data: base64Data,
                         mimeType: processedFile.type,
+                        duration: originalFile.videoDuration || null,
                         filename: originalFile.name,
                         fileSize: originalFile.size
                     })
