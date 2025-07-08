@@ -13,9 +13,34 @@
     <!-- Security headers for SharedArrayBuffer support -->
     <meta http-equiv="Cross-Origin-Embedder-Policy" content="require-corp">
     <meta http-equiv="Cross-Origin-Opener-Policy" content="same-origin">
+    <!-- Disable caching for development -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <!-- Font Awesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer">
     <link rel="stylesheet" href="/css/style.css">
+    <script>
+        // Add cache-busting to CSS and scripts on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            const timestamp = Date.now();
+            
+            // Update CSS link with cache-buster
+            const cssLink = document.querySelector('link[href="/css/style.css"]');
+            if (cssLink) {
+                cssLink.href = `/css/style.css?v=${timestamp}`;
+            }
+            
+            // Update script sources with cache-buster
+            const scripts = document.querySelectorAll('script[src^="/"]');
+            scripts.forEach(script => {
+                const originalSrc = script.src;
+                if (originalSrc && !originalSrc.includes('?v=')) {
+                    script.src = `${originalSrc}?v=${timestamp}`;
+                }
+            });
+        });
+    </script>
 </head>
 <body>
     <!-- Development Banner -->
@@ -205,14 +230,53 @@
     <script src="/assets/ffmpeg/ffmpeg.min.js"></script>
     <script src="/js/main.js"></script>
     <script>
+        // Development mode: Force cache clearing and fresh fetches
         if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/service-worker.js').then(registration => {
-                    console.log('ServiceWorker registration successful with scope: ', registration.scope);
-                }, err => {
-                    console.log('ServiceWorker registration failed: ', err);
-                });
+            window.addEventListener('load', async () => {
+                try {
+                    // First, unregister all existing service workers
+                    const registrations = await navigator.serviceWorker.getRegistrations();
+                    for (let registration of registrations) {
+                        console.log('Unregistering service worker:', registration.scope);
+                        await registration.unregister();
+                    }
+                    
+                    // Clear all caches
+                    if ('caches' in window) {
+                        const cacheNames = await caches.keys();
+                        for (let cacheName of cacheNames) {
+                            console.log('Deleting cache:', cacheName);
+                            await caches.delete(cacheName);
+                        }
+                    }
+                    
+                    // Add cache-busting timestamp to all future requests
+                    const timestamp = Date.now();
+                    console.log('Cache bust timestamp:', timestamp);
+                    
+                    // Re-register service worker with cache-busting
+                    const registration = await navigator.serviceWorker.register(`/service-worker.js?v=${timestamp}`);
+                    console.log('ServiceWorker registration successful with scope:', registration.scope);
+                    
+                    // Force update
+                    await registration.update();
+                    
+                } catch (err) {
+                    console.log('ServiceWorker setup failed:', err);
+                }
             });
         }
+        
+        // Add cache-busting to all resource requests
+        window.addEventListener('beforeunload', () => {
+            // Clear any remaining caches on page unload
+            if ('caches' in window) {
+                caches.keys().then(cacheNames => {
+                    cacheNames.forEach(cacheName => {
+                        caches.delete(cacheName);
+                    });
+                });
+            }
+        });
     </script>
 </body></html> 
