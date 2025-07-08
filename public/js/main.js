@@ -4,7 +4,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const SINGLE_FILE_UPLOAD_LIMIT = 19 * 1024 * 1024; // 19MB for individual processed files
     const TOTAL_MEDIA_SIZE_LIMIT = 100 * 1024 * 1024; // 100MB total for original media file
     const MAX_COMPRESSION_TARGET_MB = 25; // Target for compressed files
-    const ALT_TEXT_MAX_LENGTH = 3000; // Bluesky's limit
+    const ALT_TEXT_MAX_LENGTH = 2000; // Bluesky's limit
     const COMPRESSION_THRESHOLD = 20 * 1024 * 1024; // 20MB threshold for compression warning
 
     // DOM Elements
@@ -385,7 +385,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    image: base64Data,
+                    base64Data: base64Data,  // Fixed: server expects 'base64Data'
+                    mimeType: processedFile.type,  // Fixed: added required 'mimeType' 
                     filename: originalFile.name,
                     generateCaptions: settings.captions,
                     fileSize: originalFile.size
