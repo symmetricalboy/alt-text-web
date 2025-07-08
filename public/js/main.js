@@ -5,27 +5,227 @@ document.addEventListener('DOMContentLoaded', () => {
     const TOTAL_MEDIA_SIZE_LIMIT = 100 * 1024 * 1024; // 100MB total for original media file
     const MAX_COMPRESSION_TARGET_MB = 25; // Target for compressed files
     const ALT_TEXT_MAX_LENGTH = 3000; // Bluesky's limit
+    const COMPRESSION_THRESHOLD = 20 * 1024 * 1024; // 20MB threshold for compression warning
 
     // DOM Elements
     const fileInput = document.getElementById('file-input');
     const dropArea = document.getElementById('drop-area');
     const previewContainer = document.querySelector('.preview-container');
+    const optionsSection = document.getElementById('options-section');
     const generateBtn = document.getElementById('generate-btn');
     const resultBox = document.getElementById('result');
     const statusBox = document.getElementById('status-message');
     const copyBtn = document.getElementById('copy-btn');
-    const captionBtn = document.getElementById('caption-btn');
+    const downloadBtn = document.getElementById('download-btn');
     const logContainer = document.getElementById('log-container');
+    
+    // New elements
+    const themeToggle = document.getElementById('theme-toggle');
+    const progressContainer = document.getElementById('progress-container');
+    const progressFill = document.getElementById('progress-fill');
+    const progressText = document.getElementById('progress-text');
+    const logHeader = document.getElementById('log-header');
+    const logToggle = document.getElementById('log-toggle');
+    const logContent = document.getElementById('log-content');
+    const compressionModal = document.getElementById('compression-modal');
+    const modalClose = document.getElementById('modal-close');
+    const modalCancel = document.getElementById('modal-cancel');
+    const modalContinue = document.getElementById('modal-continue');
+    const dontShowAgain = document.getElementById('dont-show-again');
+    
+    // Option checkboxes
+    const optionAltText = document.getElementById('option-alt-text');
+    const optionCaptions = document.getElementById('option-captions');
+    const optionCompression = document.getElementById('option-compression');
+    const optionCompressionItem = document.getElementById('option-compression-item');
 
     // Current file data
     let originalFile = null;
     let currentMediaElement = null;
+    let compressionPromiseResolve = null;
+    let compressionPromiseReject = null;
     
     // FFmpeg instance for compression
     let ffmpeg = null;
     let ffmpegLoaded = false;
 
-    // Event Listeners
+    // ===== THEME MANAGEMENT =====
+    function initializeTheme() {
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        updateThemeToggle(savedTheme);
+    }
+
+    function updateThemeToggle(theme) {
+        const themeIcon = themeToggle.querySelector('.theme-icon');
+        const themeText = themeToggle.querySelector('.theme-text');
+        
+        if (theme === 'dark') {
+            themeIcon.className = 'theme-icon fas fa-sun';
+            themeText.textContent = 'Light';
+        } else {
+            themeIcon.className = 'theme-icon fas fa-moon';
+            themeText.textContent = 'Dark';
+        }
+    }
+
+    function toggleTheme() {
+        const currentTheme = document.documentElement.getAttribute('data-theme');
+        const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+        
+        document.documentElement.setAttribute('data-theme', newTheme);
+        localStorage.setItem('theme', newTheme);
+        updateThemeToggle(newTheme);
+    }
+
+    // ===== SETTINGS MANAGEMENT =====
+    function loadSettings() {
+        const settings = JSON.parse(localStorage.getItem('altTextSettings') || '{}');
+        
+        optionAltText.checked = settings.altText !== false; // Default true
+        optionCaptions.checked = settings.captions === true; // Default false
+        optionCompression.checked = settings.compression === true; // Default false
+        
+        return settings;
+    }
+
+    function saveSettings() {
+        const settings = {
+            altText: optionAltText.checked,
+            captions: optionCaptions.checked,
+            compression: optionCompression.checked
+        };
+        localStorage.setItem('altTextSettings', JSON.stringify(settings));
+    }
+
+    // ===== COMPRESSION MODAL MANAGEMENT =====
+    function shouldShowCompressionWarning() {
+        return !getCookie('hideCompressionWarning');
+    }
+
+    function setCookie(name, value, days) {
+        const expires = new Date();
+        expires.setTime(expires.getTime() + (days * 24 * 60 * 60 * 1000));
+        document.cookie = `${name}=${value};expires=${expires.toUTCString()};path=/`;
+    }
+
+    function getCookie(name) {
+        const nameEQ = name + "=";
+        const ca = document.cookie.split(';');
+        for (let i = 0; i < ca.length; i++) {
+            let c = ca[i];
+            while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+            if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
+        }
+        return null;
+    }
+
+    function showCompressionWarning() {
+        return new Promise((resolve, reject) => {
+            compressionPromiseResolve = resolve;
+            compressionPromiseReject = reject;
+            compressionModal.style.display = 'flex';
+        });
+    }
+
+    function hideCompressionWarning() {
+        compressionModal.style.display = 'none';
+        compressionPromiseResolve = null;
+        compressionPromiseReject = null;
+    }
+
+    // ===== PROGRESS BAR MANAGEMENT =====
+    function showProgress(text = 'Processing...') {
+        progressContainer.style.display = 'block';
+        progressText.textContent = text;
+        progressFill.style.width = '0%';
+    }
+
+    function updateProgress(percent, text) {
+        progressFill.style.width = `${Math.min(100, Math.max(0, percent))}%`;
+        if (text) progressText.textContent = text;
+    }
+
+    function hideProgress() {
+        progressContainer.style.display = 'none';
+    }
+
+    // ===== LOG MANAGEMENT =====
+    function initializeLogs() {
+        // Start with logs collapsed
+        logContent.classList.remove('expanded');
+        logToggle.classList.remove('expanded');
+    }
+
+    function toggleLogs() {
+        logContent.classList.toggle('expanded');
+        logToggle.classList.toggle('expanded');
+    }
+
+    // ===== CLIPBOARD PASTE FUNCTIONALITY =====
+    function initializeClipboardPaste() {
+        // Listen for paste events on the document
+        document.addEventListener('paste', handlePaste);
+        
+        // Update upload area text to mention paste
+        const uploadText = dropArea.querySelector('p');
+        if (uploadText) {
+            uploadText.textContent = 'Drag & drop, click to browse, or paste from clipboard';
+        }
+    }
+
+    async function handlePaste(e) {
+        e.preventDefault();
+        
+        const items = e.clipboardData?.items;
+        if (!items) return;
+        
+        for (let item of items) {
+            if (item.type.startsWith('image/') || item.type.startsWith('video/')) {
+                const file = item.getAsFile();
+                if (file) {
+                    logToUI(`📋 Pasted ${file.type} file from clipboard (${(file.size / 1024 / 1024).toFixed(2)}MB)`);
+                    originalFile = file;
+                    displayPreview(file);
+                    break;
+                }
+            }
+        }
+    }
+
+    // ===== EVENT LISTENERS =====
+    
+    // Theme toggle
+    themeToggle.addEventListener('click', toggleTheme);
+    
+    // Settings
+    optionAltText.addEventListener('change', saveSettings);
+    optionCaptions.addEventListener('change', saveSettings);
+    optionCompression.addEventListener('change', saveSettings);
+    
+    // Compression modal
+    modalClose.addEventListener('click', () => {
+        hideCompressionWarning();
+        if (compressionPromiseReject) compressionPromiseReject(new Error('User cancelled'));
+    });
+    
+    modalCancel.addEventListener('click', () => {
+        hideCompressionWarning();
+        if (compressionPromiseReject) compressionPromiseReject(new Error('User cancelled'));
+    });
+    
+    modalContinue.addEventListener('click', () => {
+        if (dontShowAgain.checked) {
+            setCookie('hideCompressionWarning', 'true', 365); // 1 year
+        }
+        hideCompressionWarning();
+        if (compressionPromiseResolve) compressionPromiseResolve();
+    });
+    
+    // Log toggle
+    logHeader.addEventListener('click', toggleLogs);
+    
+    // File input and drag/drop
     fileInput.addEventListener('change', handleFileSelect);
 
     // Drag and drop events
@@ -55,26 +255,251 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     dropArea.addEventListener('drop', handleDrop, false);
+    dropArea.addEventListener('click', () => fileInput.click());
 
     function handleDrop(e) {
         const files = e.dataTransfer.files;
         if (files.length > 0) {
-            fileInput.files = files;
-            handleFileSelect();
+            originalFile = files[0];
+            displayPreview(files[0]);
         }
     }
 
-    generateBtn.addEventListener('click', () => processMediaGeneration('altText'));
+    generateBtn.addEventListener('click', processMediaGeneration);
     copyBtn.addEventListener('click', copyToClipboard);
-    captionBtn.addEventListener('click', () => processMediaGeneration('captions'));
 
-    // UI Helpers
+    // ===== INITIALIZATION =====
+    function initialize() {
+        initializeTheme();
+        loadSettings();
+        initializeLogs();
+        initializeClipboardPaste();
+        clearLogs();
+        logToUI('🚀 Alt Text Generator ready! Upload, drag & drop, or paste media to begin.');
+    }
+
+    // ===== CORE FUNCTIONALITY (Enhanced from original) =====
+    
+    function handleFileSelect() {
+        const file = fileInput.files[0];
+        if (file) {
+            originalFile = file;
+            displayPreview(file);
+        }
+    }
+
+    function displayPreview(file) {
+        const fileSizeMB = (file.size / 1024 / 1024).toFixed(2);
+        logToUI(`📁 Selected: ${file.name} (${fileSizeMB}MB, ${file.type})`);
+        
+        previewContainer.style.display = 'block';
+        optionsSection.style.display = 'block';
+        
+        // Show compression option for large files
+        if (file.size > COMPRESSION_THRESHOLD) {
+            optionCompressionItem.style.display = 'block';
+            document.getElementById('option-compression-desc').style.display = 'block';
+        } else {
+            optionCompressionItem.style.display = 'none';
+            document.getElementById('option-compression-desc').style.display = 'none';
+        }
+        
+        const previewHtml = file.type.startsWith('video/') 
+            ? `<video id="preview" controls><source src="${URL.createObjectURL(file)}" type="${file.type}">Your browser does not support video.</video>`
+            : `<img id="preview" src="${URL.createObjectURL(file)}" alt="Preview">`;
+        
+        previewContainer.innerHTML = `<h3>Preview</h3>${previewHtml}`;
+        currentMediaElement = document.getElementById('preview');
+        generateBtn.disabled = false;
+        
+        // Validate file size
+        if (file.size > TOTAL_MEDIA_SIZE_LIMIT) {
+            updateStatus(`⚠️ File too large (${fileSizeMB}MB). Maximum size is 100MB.`, true);
+            generateBtn.disabled = true;
+        } else if (file.size > COMPRESSION_THRESHOLD) {
+            updateStatus(`ℹ️ Large file detected (${fileSizeMB}MB). Will be compressed before processing.`, false);
+        } else {
+            updateStatus(`✅ Ready to process (${fileSizeMB}MB)`, false);
+        }
+    }
+
+    async function processMediaGeneration() {
+        if (!originalFile) return;
+        
+        const settings = {
+            altText: optionAltText.checked,
+            captions: optionCaptions.checked,
+            compression: optionCompression.checked
+        };
+        
+        // Check if we need to show compression warning
+        if (originalFile.size > COMPRESSION_THRESHOLD && shouldShowCompressionWarning()) {
+            try {
+                await showCompressionWarning();
+            } catch (error) {
+                logToUI('❌ Processing cancelled by user');
+                return;
+            }
+        }
+        
+        try {
+            generateBtn.disabled = true;
+            copyBtn.disabled = true;
+            downloadBtn.disabled = true;
+            
+            let processedFile = originalFile;
+            let compressionResults = null;
+            
+            showProgress('Preparing file...');
+            updateProgress(10, 'Checking file size...');
+            
+            // Handle compression if needed
+            if (originalFile.size > SINGLE_FILE_UPLOAD_LIMIT) {
+                updateProgress(20, 'Starting compression...');
+                logToUI(`🔄 File size (${(originalFile.size / 1024 / 1024).toFixed(2)}MB) exceeds upload limit. Starting compression...`);
+                
+                try {
+                    compressionResults = await handleCompression({
+                        buffer: await originalFile.arrayBuffer(),
+                        name: originalFile.name,
+                        size: originalFile.size,
+                        type: originalFile.type
+                    });
+                    
+                    processedFile = compressionResults.blob;
+                    updateProgress(60, 'Compression complete! Uploading...');
+                    logToUI(`✅ Compression complete: ${(originalFile.size / 1024 / 1024).toFixed(2)}MB → ${(processedFile.size / 1024 / 1024).toFixed(2)}MB`);
+                } catch (error) {
+                    throw new Error(`Compression failed: ${error.message}`);
+                }
+            }
+            
+            updateProgress(70, 'Uploading to AI service...');
+            
+            // Convert to base64 for API
+            const base64Data = await fileToBase64(processedFile);
+            updateProgress(80, 'Generating content...');
+            
+            // Make API request
+            const response = await fetch(CLOUD_FUNCTION_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    image: base64Data,
+                    filename: originalFile.name,
+                    generateCaptions: settings.captions,
+                    fileSize: originalFile.size
+                })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Server error: ${response.status} ${response.statusText}`);
+            }
+            
+            updateProgress(95, 'Processing results...');
+            const result = await response.json();
+            
+            updateProgress(100, 'Complete!');
+            hideProgress();
+            
+            // Display results
+            displayResults(result, settings, compressionResults);
+            
+        } catch (error) {
+            hideProgress();
+            const errorMsg = `❌ Error: ${error.message}`;
+            updateStatus(errorMsg, true);
+            logToUI(errorMsg);
+        } finally {
+            generateBtn.disabled = false;
+        }
+    }
+
+    function displayResults(result, settings, compressionResults) {
+        let displayText = '';
+        let downloadData = null;
+        
+        if (settings.altText && result.altText) {
+            displayText += `🖼️ Alt Text:\n${result.altText}\n\n`;
+            
+            if (settings.altText) {
+                // Auto-copy to clipboard if alt text is enabled
+                navigator.clipboard.writeText(result.altText).then(() => {
+                    showToast('✅ Alt text copied to clipboard!', 'success');
+                }).catch(() => {
+                    logToUI('⚠️ Could not auto-copy to clipboard');
+                });
+            }
+        }
+        
+        if (settings.captions && result.captions) {
+            displayText += `🎥 Captions:\n${result.captions}\n\n`;
+            downloadData = {
+                content: result.captions,
+                filename: `${originalFile.name.split('.')[0]}_captions.vtt`,
+                type: 'text/vtt'
+            };
+        }
+        
+        if (compressionResults && settings.compression) {
+            displayText += `📦 Compressed file available for download\n`;
+            displayText += `Original: ${(compressionResults.originalSize / 1024 / 1024).toFixed(2)}MB → Compressed: ${(compressionResults.blob.size / 1024 / 1024).toFixed(2)}MB\n\n`;
+            
+            if (!downloadData) {
+                downloadData = {
+                    blob: compressionResults.blob,
+                    filename: `compressed_${originalFile.name}`,
+                    type: compressionResults.blob.type
+                };
+            }
+        }
+        
+        resultBox.textContent = displayText || 'No content generated with current settings.';
+        
+        // Enable buttons
+        copyBtn.disabled = !result.altText;
+        
+        if (downloadData) {
+            downloadBtn.style.display = 'inline-block';
+            downloadBtn.disabled = false;
+            downloadBtn.onclick = () => downloadFile(downloadData);
+        } else {
+            downloadBtn.style.display = 'none';
+        }
+        
+        updateStatus('✅ Generation complete!', false);
+        logToUI('🎉 Content generation completed successfully!');
+    }
+
+    function downloadFile(data) {
+        const blob = data.blob || new Blob([data.content], { type: data.type });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = data.filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        showToast(`💾 Downloaded: ${data.filename}`, 'success');
+    }
+
+    // ===== UTILITY FUNCTIONS (Enhanced from original) =====
+    
     function logToUI(message) {
-        console.log(message); // Also log to console for debugging
+        console.log(message);
         const logEntry = document.createElement('p');
         logEntry.innerHTML = `[${new Date().toLocaleTimeString()}] ${message}`;
         logContainer.appendChild(logEntry);
-        logContainer.scrollTop = logContainer.scrollHeight; // Auto-scroll
+        logContainer.scrollTop = logContainer.scrollHeight;
+        
+        // Auto-expand logs if there's an error
+        if (message.includes('❌') || message.includes('Error')) {
+            if (!logContent.classList.contains('expanded')) {
+                toggleLogs();
+            }
+        }
     }
 
     function clearLogs() {
@@ -82,14 +507,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateStatus(message, isError = false) {
-        const statusElement = document.getElementById('status-message');
+        const statusElement = statusBox;
         statusElement.textContent = message;
-        statusElement.style.color = isError ? 'var(--error-color)' : '#666';
+        statusElement.style.color = isError ? 'var(--error-color)' : 'var(--text-secondary)';
         statusElement.style.display = message ? 'block' : 'none';
         logToUI(message);
     }
 
-    // FFmpeg initialization and loading
+    // FFmpeg initialization and loading (Enhanced from original)
     async function loadFFmpeg() {
         if (ffmpegLoaded) {
             logToUI('FFmpeg is already loaded.');
@@ -97,7 +522,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         try {
-            logToUI('Loading FFmpeg...');
+            logToUI('⚙️ Loading FFmpeg...');
             const { createFFmpeg, fetchFile } = FFmpeg;
             
             ffmpeg = createFFmpeg({
@@ -111,31 +536,31 @@ document.addEventListener('DOMContentLoaded', () => {
                 progress: (progress) => {
                     const percent = Math.round(progress.ratio * 100);
                     if (percent < 100) {
-                        updateStatus(`Compressing video... ${percent}%`, false);
+                        updateProgress(20 + (percent * 0.4), `Compressing video... ${percent}%`);
                     }
                 },
             });
             
             await ffmpeg.load();
             ffmpegLoaded = true;
-            logToUI('FFmpeg loaded successfully!');
+            logToUI('✅ FFmpeg loaded successfully!');
             return { ffmpeg, fetchFile };
         } catch (error) {
-            logToUI(`Error loading FFmpeg: ${error.message}`);
+            logToUI(`❌ Error loading FFmpeg: ${error.message}`);
             throw error;
         }
     }
     
-    // Compression handler for worker-proxied requests
+    // Compression handler (Enhanced from original)
     async function handleCompression(fileData) {
         try {
-            logToUI('Main thread received file for compression');
+            logToUI('🔄 Main thread received file for compression');
             
             const { ffmpeg, fetchFile } = await loadFFmpeg();
             
             const { buffer, name, size, type } = fileData;
             const originalSizeMB = (size / 1024 / 1024).toFixed(2);
-            logToUI(`Starting compression of ${name} (${originalSizeMB}MB)`);
+            logToUI(`🔄 Starting compression of ${name} (${originalSizeMB}MB)`);
             
             // Convert ArrayBuffer to Uint8Array for FFmpeg
             const fileBytes = new Uint8Array(buffer);
@@ -144,27 +569,26 @@ document.addEventListener('DOMContentLoaded', () => {
             // Tiered compression settings
             const qualitySettings = {
                 codec: 'libx264',
-                crf: 28, // Medium quality
+                crf: 28,
                 preset: 'veryfast',
                 audioBitrate: '128k',
                 movflags: '+faststart',
                 vf: []
             };
             
-            if (size > 50 * 1024 * 1024) { // > 50MB
-                logToUI('Very large file, using aggressive compression.');
-                qualitySettings.crf = 32; // Lower quality, smaller size
+            if (size > 50 * 1024 * 1024) {
+                logToUI('📦 Very large file, using aggressive compression.');
+                qualitySettings.crf = 32;
                 qualitySettings.preset = 'ultrafast';
-                qualitySettings.vf.push('fps=30'); // Cap framerate
+                qualitySettings.vf.push('fps=30');
                 qualitySettings.vf.push('scale=min(iw\\,1280):min(ih\\,720):force_original_aspect_ratio=decrease');
-            } else if (size > 20 * 1024 * 1024) { // > 20MB
-                logToUI('Large file, using stronger compression.');
+            } else if (size > 20 * 1024 * 1024) {
+                logToUI('📦 Large file, using stronger compression.');
                 qualitySettings.crf = 30;
                 qualitySettings.preset = 'faster';
                 qualitySettings.vf.push('scale=min(iw\\,1920):min(ih\\,1080):force_original_aspect_ratio=decrease');
             }
             
-            // Ensure dimensions are divisible by 2 for H.264
             qualitySettings.vf.push('scale=trunc(iw/2)*2:trunc(ih/2)*2');
             
             const ffmpegArgs = [
@@ -182,14 +606,14 @@ document.addEventListener('DOMContentLoaded', () => {
             
             ffmpegArgs.push('-movflags', qualitySettings.movflags, 'output.mp4');
             
-            logToUI(`Running FFmpeg command: ${ffmpegArgs.join(' ')}`);
+            logToUI(`⚙️ Running FFmpeg command: ${ffmpegArgs.join(' ')}`);
             
             await ffmpeg.run(...ffmpegArgs);
             
             const data = ffmpeg.FS('readFile', 'output.mp4');
             const compressedBlob = new Blob([data.buffer], { type: 'video/mp4' });
             
-            logToUI(`FFmpeg processing finished. Original size: ${originalSizeMB}MB, Compressed size: ${(compressedBlob.size / 1024 / 1024).toFixed(2)}MB`);
+            logToUI(`✅ FFmpeg processing finished. Original: ${originalSizeMB}MB → Compressed: ${(compressedBlob.size / 1024 / 1024).toFixed(2)}MB`);
             
             // Cleanup filesystem
             ffmpeg.FS('unlink', name);
@@ -200,365 +624,57 @@ document.addEventListener('DOMContentLoaded', () => {
                 originalSize: size
             };
         } catch (error) {
-            logToUI(`Compression error in main thread: ${error.message}`);
+            logToUI(`❌ Compression error: ${error.message}`);
             throw error;
         }
     }
 
-    // File handling
-    function handleFileSelect() {
-        clearLogs();
-        logToUI('File selection changed.');
-        const file = fileInput.files[0];
-
-        if (!file) return;
-
-        // Check if file exceeds TOTAL_MEDIA_SIZE_LIMIT first
-        if (file.size > TOTAL_MEDIA_SIZE_LIMIT) {
-            showToast(`File is too large (${(file.size / (1024 * 1024)).toFixed(1)}MB). Maximum total size is ${TOTAL_MEDIA_SIZE_LIMIT / (1024 * 1024)}MB.`, 'error');
-            updateStatus(`File exceeds maximum allowed size of ${TOTAL_MEDIA_SIZE_LIMIT / (1024 * 1024)}MB.`, true);
-            previewContainer.style.display = 'none';
-            previewContainer.innerHTML = '<h3>Preview</h3>';
-            originalFile = null;
-            fileInput.value = '';
-            generateBtn.disabled = true;
-            captionBtn.style.display = 'none';
-            return;
-        }
-
-        originalFile = file;
-
-        // Clear previous preview
-        previewContainer.innerHTML = '<h3>Preview</h3>';
-        currentMediaElement = null;
-
-        // Create appropriate preview
-        if (file.type.startsWith('image/')) {
-            const img = document.createElement('img');
-            img.id = 'preview';
-            img.file = file;
-            previewContainer.appendChild(img);
-            currentMediaElement = img;
-
-            const reader = new FileReader();
-            reader.onload = (e) => { img.src = e.target.result; };
-            reader.readAsDataURL(file);
-        } else if (file.type.startsWith('video/')) {
-            const video = document.createElement('video');
-            video.id = 'preview';
-            video.controls = true;
-            video.muted = true;
-            video.preload = 'metadata';
-            previewContainer.appendChild(video);
-            currentMediaElement = video;
-
-            const reader = new FileReader();
-            reader.onload = (e) => { video.src = e.target.result; };
-            reader.readAsDataURL(file);
-
-            // Add file size info for videos
-            if (file.size > SINGLE_FILE_UPLOAD_LIMIT) {
-                const info = document.createElement('p');
-                info.style.color = 'orange';
-                info.style.marginTop = '10px';
-                info.textContent = `Note: This video is ${(file.size / (1024 * 1024)).toFixed(1)}MB. Large videos will be compressed for processing.`;
-                previewContainer.appendChild(info);
-            }
-        }
-
-        previewContainer.style.display = 'block';
-
-        // Reset result and status
-        resultBox.innerHTML = '<p style="color: #666;">Click "Generate Alt Text" to analyze this media...</p>';
-        document.getElementById('status-message').style.display = 'none';
-        copyBtn.disabled = true;
-
-        logToUI(`Selected file: <strong>${file.name}</strong>, type: ${file.type}, size: ${(file.size / 1024 / 1024).toFixed(2)}MB`);
-
-        // Enable/disable buttons
-        generateBtn.disabled = false;
-        if (file.type.startsWith('video/')) {
-            captionBtn.style.display = 'block';
-        } else {
-            captionBtn.style.display = 'none';
-        }
-
-        logToUI('Ready to process.');
-    }
-
-    // Main processing logic
-    async function processMediaGeneration(generationType) {
-        if (!originalFile) {
-            logToUI('Processing aborted: No file selected.');
-            updateStatus('Please select an image or video file first.', true);
-            showToast('No file selected.', 'error');
-            return;
-        }
-
-        const originalBtn = (generationType === 'altText') ? generateBtn : captionBtn;
-        const otherBtn = (generationType === 'altText') ? captionBtn : generateBtn;
-        const originalBtnText = originalBtn.innerHTML;
-
-        originalBtn.innerHTML = `<span class="loading"></span>Processing...`;
-        originalBtn.disabled = true;
-        otherBtn.disabled = true;
-
-        logToUI(`Starting generation for: <strong>${generationType}</strong>`);
-
-        if (generationType === 'altText') {
-            resultBox.innerHTML = '<p style="color: #666;">Processing for alt text...</p>';
-            copyBtn.disabled = true;
-        } else {
-            resultBox.innerHTML = '<p style="color: #666;">Processing for captions...</p>';
-        }
-
-        try {
-            let fileToProcess = originalFile;
-
-            // If file is large and video, compress it first
-            if (fileToProcess.size > SINGLE_FILE_UPLOAD_LIMIT && fileToProcess.type.startsWith('video/')) {
-                logToUI('Large video detected. Offloading to compression worker.');
-                updateStatus('Compressing large video... 0%', false);
-
-                const compressionWorker = new Worker('/compression-worker.js');
-
-                fileToProcess = await new Promise((resolve, reject) => {
-                    compressionWorker.onmessage = (event) => {
-                        const { type, data } = event.data;
-                        
-                        if (type === 'log') {
-                            logToUI(`[Worker]: ${data}`);
-                        } else if (type === 'progress') {
-                            const percent = Math.round(data.ratio * 100);
-                            if (percent < 100) {
-                                updateStatus(`Compressing large video... ${percent}%`, false);
-                            }
-                        } else if (type === 'proxy_compress') {
-                            // Worker is asking the main thread to do the FFmpeg compression
-                            logToUI('Worker requested main thread to handle compression');
-                            
-                            // Process the compression in the main thread and send back the result
-                            handleCompression(data)
-                                .then(result => {
-                                    compressionWorker.postMessage({
-                                        type: 'compressed_result',
-                                        data: result
-                                    });
-                                })
-                                .catch(error => {
-                                    compressionWorker.postMessage({
-                                        type: 'error',
-                                        data: { message: error.message }
-                                    });
-                                    reject(error);
-                                });
-                            
-                        } else if (type === 'result') {
-                            const compressedBlob = data.blob;
-                            logToUI(`Compression successful. Original: ${(data.originalSize / 1024 / 1024).toFixed(2)}MB, New: ${(compressedBlob.size / 1024 / 1024).toFixed(2)}MB`);
-                            updateStatus('Compression complete. Processing...', false);
-                            resolve(new File([compressedBlob], originalFile.name, { type: compressedBlob.type }));
-                            compressionWorker.terminate();
-                        } else if (type === 'error') {
-                            logToUI(`<strong>[Worker Error]:</strong> ${data.message}`);
-                            reject(new Error(data.message));
-                            compressionWorker.terminate();
-                        }
-                    };
-
-                    compressionWorker.postMessage({ 
-                        type: 'compress', 
-                        data: { file: originalFile } 
-                    });
-                });
-            }
-
-            // Process the file (original or compressed)
-            logToUI('Converting file to Base64 for upload...');
-            const base64 = await fileToBase64(fileToProcess);
-
-            let requestBody = {
-                base64Data: base64,
-                mimeType: fileToProcess.type,
-                isVideo: fileToProcess.type.startsWith('video/') || fileToProcess.type === 'image/gif',
-                fileName: originalFile.name,
-                fileSize: fileToProcess.size,
-                isChunk: false,
-                chunkIndex: 1,
-                totalChunks: 1
-            };
-
-            if (originalFile.type.startsWith('video/') && currentMediaElement instanceof HTMLVideoElement) {
-                requestBody.videoDuration = currentMediaElement.duration || 0;
-                requestBody.videoWidth = currentMediaElement.videoWidth || 0;
-                requestBody.videoHeight = currentMediaElement.videoHeight || 0;
-            }
-
-            if (generationType === 'captions') {
-                requestBody.action = 'generateCaptions';
-            }
-
-            logToUI('Sending data to the AI for analysis...');
-            updateStatus('Sending to AI for analysis...', false);
-
-            const response = await fetch(CLOUD_FUNCTION_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(requestBody)
-            });
-
-            if (!response.ok) {
-                let errorDetail = `Server error: ${response.status} ${response.statusText}`;
-                try {
-                    const errData = await response.json();
-                    errorDetail = errData.error || errorDetail;
-                } catch (e) {}
-                throw new Error(errorDetail);
-            }
-
-            const apiResponseData = await response.json();
-
-            if (generationType === 'altText') {
-                if (apiResponseData.altText) {
-                    let altText = apiResponseData.altText.trim();
-                    logToUI('Successfully received alt text from AI.');
-
-                    if (altText.length > ALT_TEXT_MAX_LENGTH) {
-                        logToUI('Alt text is too long, truncating for display.');
-                        const truncationPoint = altText.lastIndexOf('.', ALT_TEXT_MAX_LENGTH - 7);
-                        if (truncationPoint > ALT_TEXT_MAX_LENGTH * 0.6) {
-                            altText = altText.substring(0, truncationPoint + 1) + " (...)";
-                        } else {
-                            altText = altText.substring(0, ALT_TEXT_MAX_LENGTH - 7) + "... (...)";
-                        }
-                        showToast('Alt text was truncated to fit Bluesky\'s limit.', 'warning', 4000);
-                    }
-
-                    updateResult(altText);
-                    updateStatus('Alt text generated successfully!', false);
-                    copyBtn.disabled = false;
-                    showToast('Alt text generated!', 'success');
-                } else {
-                    logToUI(`Error from server: ${apiResponseData.error || 'No alt text generated'}`);
-                    throw new Error(apiResponseData.error || 'No alt text generated');
-                }
-            } else {
-                if (apiResponseData.vttContent) {
-                    logToUI('Successfully received caption data from AI.');
-                    const baseFileName = originalFile.name.substring(0, originalFile.name.lastIndexOf('.')) || originalFile.name;
-                    downloadVTTFile(apiResponseData.vttContent, `captions-${baseFileName}.vtt`);
-                    updateStatus('Captions generated and download started.', false);
-                    showToast('Captions generated and download started.', 'success');
-                    resultBox.innerHTML = `<p style="color: #666;">Caption file has been downloaded. Check your downloads folder.</p>`;
-                } else {
-                    logToUI(`Error from server: ${apiResponseData.error || 'No caption data generated'}`);
-                    throw new Error(apiResponseData.error || 'No caption data generated');
-                }
-            }
-
-        } catch (error) {
-            console.error(`Error processing ${generationType}:`, error);
-            logToUI(`<strong>Error:</strong> ${error.message}`);
-            updateStatus(`An error occurred: ${error.message}`, true);
-            showToast(`Error: ${error.message}`, 'error', 7000);
-            if (generationType === 'altText') {
-                resultBox.innerHTML = '<p style="color: var(--error-color);">Failed to generate alt text. Please try again.</p>';
-            }
-        } finally {
-            // Restore button states
-            originalBtn.innerHTML = originalBtnText;
-            originalBtn.disabled = false;
-            otherBtn.disabled = false;
-        }
-    }
-
-    // Helper function to update the result text area
-    function updateResult(text) {
-        if (text && text.trim()) {
-            resultBox.innerHTML = `<p>${text.replace(/\n/g, '<br>')}</p>`;
-        } else {
-            resultBox.innerHTML = '<p style="color: #666;">No alt text generated.</p>';
-        }
-    }
-
-    // Helper function to download the VTT file
-    function downloadVTTFile(vttContent, filename) {
-        const blob = new Blob([vttContent], { type: 'text/vtt' });
-        const url = URL.createObjectURL(blob);
-
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-
-        // Clean up
-        setTimeout(() => {
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-        }, 100);
-    }
-
-    // Helper function to convert file to base64
     function fileToBase64(file) {
         return new Promise((resolve, reject) => {
-            const sizeMB = file.size / (1024 * 1024);
-            if (sizeMB > 5) {
-                updateStatus(`Converting file (${sizeMB.toFixed(1)}MB) to base64...`, false);
-            }
-
             const reader = new FileReader();
             reader.readAsDataURL(file);
             reader.onload = () => {
-                const result = reader.result;
-                const base64 = result.split(',')[1];
+                // Remove the data URL prefix (e.g., "data:image/jpeg;base64,")
+                const base64 = reader.result.split(',')[1];
                 resolve(base64);
             };
             reader.onerror = error => reject(error);
-
-            reader.onprogress = (event) => {
-                if (event.lengthComputable && sizeMB > 2) {
-                    const percentLoaded = Math.round((event.loaded / event.total) * 100);
-                    updateStatus(`Preparing file: ${percentLoaded}% complete`, false);
-                }
-            };
         });
     }
 
-    // Copy to clipboard
     function copyToClipboard() {
         const text = resultBox.textContent;
-        if (!text) return;
-
-        navigator.clipboard.writeText(text)
-            .then(() => {
-                showToast('Copied to clipboard!', 'success');
-            })
-            .catch(err => {
-                console.error('Could not copy text: ', err);
-                showToast('Failed to copy to clipboard', 'error');
-            });
+        if (!text || text.includes('Generated alt text')) return;
+        
+        // Extract just the alt text part
+        const altTextMatch = text.match(/🖼️ Alt Text:\n(.*?)(?:\n\n|$)/s);
+        const textToCopy = altTextMatch ? altTextMatch[1] : text;
+        
+        navigator.clipboard.writeText(textToCopy).then(() => {
+            showToast('✅ Copied to clipboard!', 'success');
+            logToUI('📋 Alt text copied to clipboard');
+        }).catch(err => {
+            showToast('❌ Failed to copy to clipboard', 'error');
+            logToUI(`❌ Clipboard error: ${err.message}`);
+        });
     }
 
-    // Show toast notification
     function showToast(message, type = 'success', duration = 3000) {
-        document.querySelectorAll('.toast').forEach(t => t.remove());
-
+        // Remove existing toasts
+        const existingToasts = document.querySelectorAll('.toast');
+        existingToasts.forEach(toast => toast.remove());
+        
         const toast = document.createElement('div');
         toast.className = `toast ${type}`;
         toast.textContent = message;
         document.body.appendChild(toast);
-
-        void toast.offsetWidth;
-        toast.style.opacity = '1';
-
+        
         setTimeout(() => {
-            toast.style.opacity = '0';
-            setTimeout(() => {
-                if (toast.parentNode) {
-                    toast.parentNode.removeChild(toast);
-                }
-            }, 300);
+            toast.style.animation = 'toastSlideOut 0.3s ease forwards';
+            setTimeout(() => toast.remove(), 300);
         }, duration);
     }
+
+    // Initialize the application
+    initialize();
 }); 
