@@ -320,6 +320,37 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Helper function to ensure video duration is available
+    async function ensureVideoDuration(file) {
+        if (!file.type.startsWith('video/')) {
+            return null; // Not a video
+        }
+        
+        if (file.videoDuration && file.videoDuration > 0) {
+            return file.videoDuration; // Already detected
+        }
+        
+        // Wait for duration to be detected if video element exists
+        if (currentMediaElement && currentMediaElement.tagName === 'VIDEO') {
+            return new Promise((resolve) => {
+                if (currentMediaElement.duration && !isNaN(currentMediaElement.duration)) {
+                    file.videoDuration = currentMediaElement.duration;
+                    resolve(currentMediaElement.duration);
+                } else {
+                    const handler = () => {
+                        file.videoDuration = currentMediaElement.duration;
+                        logToUI(`🎥 Video duration detected: ${currentMediaElement.duration.toFixed(1)} seconds`);
+                        currentMediaElement.removeEventListener('loadedmetadata', handler);
+                        resolve(currentMediaElement.duration);
+                    };
+                    currentMediaElement.addEventListener('loadedmetadata', handler);
+                }
+            });
+        }
+        
+        return null; // Couldn't detect duration
+    }
+
     async function processMediaGeneration() {
         if (!originalFile) return;
         
@@ -393,7 +424,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 
                 if (!altTextResponse.ok) {
-                    throw new Error(`Alt text generation failed: ${altTextResponse.status} ${altTextResponse.statusText}`);
+                    // Try to get detailed error message from response
+                    let errorMessage = `Alt text generation failed: ${altTextResponse.status}`;
+                    try {
+                        const errorData = await altTextResponse.json();
+                        if (errorData.error) {
+                            errorMessage += ` - ${errorData.error}`;
+                        }
+                    } catch (e) {
+                        // If JSON parsing fails, add status text
+                        errorMessage += ` ${altTextResponse.statusText}`;
+                    }
+                    logToUI(`🚨 Server Error Details: ${errorMessage}`);
+                    throw new Error(errorMessage);
                 }
                 
                 const altTextResult = await altTextResponse.json();
@@ -404,6 +447,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (settings.captions && processedFile.type.startsWith('video/')) {
                 updateProgress(85, 'Generating captions...');
                 
+                // Ensure video duration is available for better caption generation
+                const videoDuration = await ensureVideoDuration(originalFile);
+                logToUI(`🎥 Using video duration: ${videoDuration ? videoDuration.toFixed(1) + ' seconds' : 'unknown'}`);
+                
                 const captionsResponse = await fetch(CLOUD_FUNCTION_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -411,14 +458,26 @@ document.addEventListener('DOMContentLoaded', () => {
                         action: 'generateCaptions',
                         base64Data: base64Data,
                         mimeType: processedFile.type,
-                        duration: originalFile.videoDuration || null,
+                        duration: videoDuration || null,
                         filename: originalFile.name,
                         fileSize: originalFile.size
                     })
                 });
                 
                 if (!captionsResponse.ok) {
-                    throw new Error(`Caption generation failed: ${captionsResponse.status} ${captionsResponse.statusText}`);
+                    // Try to get detailed error message from response
+                    let errorMessage = `Caption generation failed: ${captionsResponse.status}`;
+                    try {
+                        const errorData = await captionsResponse.json();
+                        if (errorData.error) {
+                            errorMessage += ` - ${errorData.error}`;
+                        }
+                    } catch (e) {
+                        // If JSON parsing fails, add status text
+                        errorMessage += ` ${captionsResponse.statusText}`;
+                    }
+                    logToUI(`🚨 Server Error Details: ${errorMessage}`);
+                    throw new Error(errorMessage);
                 }
                 
                 const captionsResult = await captionsResponse.json();
