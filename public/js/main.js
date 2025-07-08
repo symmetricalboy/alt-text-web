@@ -61,11 +61,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const themeText = themeToggle.querySelector('.theme-text');
         
         if (theme === 'dark') {
-            themeIcon.className = 'theme-icon fas fa-sun';
-            themeText.textContent = 'Light';
-        } else {
             themeIcon.className = 'theme-icon fas fa-moon';
             themeText.textContent = 'Dark';
+        } else {
+            themeIcon.className = 'theme-icon fas fa-sun';
+            themeText.textContent = 'Light';
         }
     }
 
