@@ -1261,4 +1261,161 @@ footer {
     .status-text {
         font-size: 0.75rem;
     }
+}
+
+/* Ko-fi Donation Link */
+.kofi-donation-link {
+    position: absolute;
+    bottom: 40px;
+    right: 40px;
+    z-index: 1000;
+    text-decoration: none;
+    border-radius: 50%;
+    background: var(--background-secondary);
+    border: 2px solid var(--primary-blue);
+    padding: 10px;
+    box-shadow: var(--shadow-md);
+    transition: 
+        transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275),
+        box-shadow 0.3s ease,
+        background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    width: 50px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.kofi-donation-link:hover {
+    transform: scale(1.35);
+    box-shadow: 0 10px 30px rgba(0, 133, 255, 0.3);
+    background: var(--primary-blue-light);
+    border-color: var(--primary-blue-hover);
+    animation: kofi-super-jiggle 1.2s ease-in-out;
+}
+
+.kofi-icon-stack {
+    position: relative;
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.kofi-mug {
+    color: var(--primary-blue);
+    font-size: 20px;
+    position: absolute;
+    z-index: 1;
+    transition: color 0.3s ease;
+}
+
+.kofi-heart {
+    color: #ffffff;
+    font-size: 8px;
+    position: absolute;
+    top: 5px;
+    left: 45%;
+    transform: translateX(-50%);
+    z-index: 2;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+    transition: 
+        color 0.3s ease,
+        transform 0.3s ease;
+}
+
+.kofi-donation-link:hover .kofi-mug {
+    color: var(--secondary-blue);
+    animation: kofi-mug-pulse 1.2s ease-in-out;
+}
+
+.kofi-donation-link:hover .kofi-heart {
+    color: #ff4757;
+    transform: translateX(-50%) scale(1.2);
+    animation: kofi-heart-beat 1.2s ease-in-out;
+}
+
+/* Enhanced Ko-fi animations */
+@keyframes kofi-super-jiggle {
+    0%, 100% { transform: scale(1.35) rotate(0deg); }
+    10% { transform: scale(1.4) rotate(-8deg); }
+    20% { transform: scale(1.3) rotate(8deg); }
+    30% { transform: scale(1.38) rotate(-6deg); }
+    40% { transform: scale(1.32) rotate(6deg); }
+    50% { transform: scale(1.36) rotate(-4deg); }
+    60% { transform: scale(1.34) rotate(4deg); }
+    70% { transform: scale(1.37) rotate(-2deg); }
+    80% { transform: scale(1.33) rotate(2deg); }
+    90% { transform: scale(1.35) rotate(-1deg); }
+}
+
+@keyframes kofi-mug-pulse {
+    0%, 100% { transform: scale(1); }
+    25% { transform: scale(1.1); }
+    50% { transform: scale(1.05); }
+    75% { transform: scale(1.08); }
+}
+
+@keyframes kofi-heart-beat {
+    0%, 100% { transform: translateX(-50%) scale(1.2); }
+    25% { transform: translateX(-50%) scale(1.4); }
+    50% { transform: translateX(-50%) scale(1.3); }
+    75% { transform: translateX(-50%) scale(1.35); }
+}
+
+/* Dark mode adjustments for Ko-fi link */
+[data-theme="dark"] .kofi-donation-link {
+    background: var(--background-tertiary);
+    border-color: var(--border-hover);
+}
+
+[data-theme="dark"] .kofi-donation-link:hover {
+    background: var(--background-secondary);
+}
+
+/* Position Ko-fi link relative to the page, not viewport */
+body {
+    position: relative;
+}
+
+/* Mobile adjustments for Ko-fi link */
+@media (max-width: 768px) {
+    .kofi-donation-link {
+        bottom: 30px;
+        right: 30px;
+        width: 44px;
+        height: 44px;
+        padding: 8px;
+    }
+    
+    .kofi-donation-link:hover {
+        transform: scale(1.25);
+        animation: kofi-mobile-jiggle 1s ease-in-out;
+    }
+    
+    .kofi-icon-stack {
+        width: 20px;
+        height: 20px;
+    }
+    
+    .kofi-mug {
+        font-size: 18px;
+    }
+    
+    .kofi-heart {
+        font-size: 9px;
+    }
+}
+
+/* Mobile-optimized jiggle animation */
+@keyframes kofi-mobile-jiggle {
+    0%, 100% { transform: scale(1.25) rotate(0deg); }
+    15% { transform: scale(1.3) rotate(-6deg); }
+    30% { transform: scale(1.2) rotate(6deg); }
+    45% { transform: scale(1.28) rotate(-4deg); }
+    60% { transform: scale(1.22) rotate(4deg); }
+    75% { transform: scale(1.26) rotate(-2deg); }
+    90% { transform: scale(1.24) rotate(1deg); }
 } 
