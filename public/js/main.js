@@ -7,49 +7,178 @@ document.addEventListener('DOMContentLoaded', () => {
     const ALT_TEXT_MAX_LENGTH = 2000; // Bluesky's limit
     const COMPRESSION_THRESHOLD = 20 * 1024 * 1024; // 20MB threshold for compression warning
 
-    // DOM Elements
+    // DOM Elements - New Structure
     const fileInput = document.getElementById('file-input');
     const dropArea = document.getElementById('drop-area');
-    const previewContainer = document.querySelector('.preview-container');
-    const optionsSection = document.getElementById('options-section');
-    const generateBtn = document.getElementById('generate-btn');
-    const resultBox = document.getElementById('result');
-    const statusBox = document.getElementById('status-message');
-    const copyBtn = document.getElementById('copy-btn');
-    const downloadBtn = document.getElementById('download-btn');
-    const logContainer = document.getElementById('log-container');
     
-    // New elements
-    const progressContainer = document.getElementById('progress-container');
+    // Sections
+    const uploadSection = document.getElementById('upload-section');
+    const previewSection = document.getElementById('preview-section');
+    const processingSection = document.getElementById('processing-section');
+    const resultsSection = document.getElementById('results-section');
+    
+    // Preview elements
+    const previewContent = document.getElementById('preview');
+    
+    // Buttons
+    const generateBtn = document.getElementById('generate-btn');
+    const clearBtn = document.getElementById('clear-btn');
+    const copyBtn = document.getElementById('copy-btn');
+    const downloadVttBtn = document.getElementById('download-vtt-btn');
+    const downloadCompressedBtn = document.getElementById('download-compressed-btn');
+    const startOverBtn = document.getElementById('start-over-btn');
+    
+    // Status and progress elements
     const progressFill = document.getElementById('progress-fill');
     const progressText = document.getElementById('progress-text');
-    const logHeader = document.getElementById('log-header');
-    const logToggle = document.getElementById('log-toggle');
-    const logContent = document.getElementById('log-content');
+    const statusDot = document.getElementById('status-dot');
+    const statusText = document.getElementById('status-text');
+    
+    // Results
+    const altTextResult = document.getElementById('alt-text-result');
+    
+    // Logs overlay elements
+    const viewLogsBtn = document.getElementById('view-logs-btn');
+    const logsOverlay = document.getElementById('logs-overlay');
+    const closeLogsBtn = document.getElementById('close-logs-btn');
+    const emailLogsBtn = document.getElementById('email-logs-btn');
+    const logContainer = document.getElementById('log-container');
+    
+    // Modal elements
     const compressionModal = document.getElementById('compression-modal');
     const modalClose = document.getElementById('modal-close');
     const modalCancel = document.getElementById('modal-cancel');
     const modalContinue = document.getElementById('modal-continue');
     const dontShowAgain = document.getElementById('dont-show-again');
     
-    // Option checkboxes
-    const optionAltText = document.getElementById('option-alt-text');
-    const optionCaptions = document.getElementById('option-captions');
-    const optionCompression = document.getElementById('option-compression');
-    const optionCompressionItem = document.getElementById('option-compression-item');
+    // PWA Install Button
+    const pwaInstallBtn = document.getElementById('pwa-install-btn');
+    
+
 
     // Current file data
     let originalFile = null;
     let currentMediaElement = null;
     let compressionPromiseResolve = null;
     let compressionPromiseReject = null;
+    let generatedResults = null;
     
     // FFmpeg instance for compression
     let ffmpeg = null;
     let ffmpegLoaded = false;
+    
+    // PWA Install prompt
+    let deferredPrompt = null;
+    
+    // App version
+    let appVersion = null;
+
+    // ===== SECTION MANAGEMENT =====
+    
+    function showSection(sectionToShow) {
+        const sections = [uploadSection, previewSection, processingSection, resultsSection];
+        sections.forEach(section => {
+            section.style.display = 'none';
+        });
+        sectionToShow.style.display = 'flex';
+    }
+
+    function resetToUpload() {
+        originalFile = null;
+        currentMediaElement = null;
+        generatedResults = null;
+        
+        // Reset file input
+        fileInput.value = '';
+        
+
+        
+        // Clear preview
+        previewContent.innerHTML = '';
+        
+        // Reset status
+        updateStatus('Ready to generate alt text', 'ready');
+        
+        // Show upload section
+        showSection(uploadSection);
+    }
+
+    // ===== STATUS MANAGEMENT =====
+    
+    function updateStatus(message, type = 'normal') {
+        statusText.textContent = message;
+        
+        // Update dot color based on type
+        statusDot.className = 'status-dot';
+        if (type === 'error') {
+            statusDot.classList.add('error');
+        } else if (type === 'success') {
+            statusDot.classList.add('success');
+        } else if (type === 'warning') {
+            statusDot.classList.add('warning');
+        } else if (type === 'processing') {
+            statusDot.classList.add('processing');
+        }
+        
+        // Log to console and logs overlay
+        logToUI(message);
+    }
+
+    function updateProgress(percent, text) {
+        progressFill.style.width = `${percent}%`;
+        progressText.textContent = text;
+    }
+
+    // ===== PWA INSTALLATION MANAGEMENT =====
+    
+    // Listen for the beforeinstallprompt event
+    window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        pwaInstallBtn.style.display = 'flex';
+        logToUI('📱 PWA install prompt available');
+    });
+
+    // Handle PWA install button click
+    pwaInstallBtn.addEventListener('click', async () => {
+        if (!deferredPrompt) {
+            logToUI('❌ PWA install prompt not available');
+            return;
+        }
+
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        
+        if (outcome === 'accepted') {
+            logToUI('✅ PWA install accepted');
+            showToast('App installed successfully!', 'success');
+        } else {
+            logToUI('❌ PWA install dismissed');
+            showToast('App installation cancelled', 'warning');
+        }
+        
+        deferredPrompt = null;
+        pwaInstallBtn.style.display = 'none';
+    });
+
+    // Listen for the appinstalled event
+    window.addEventListener('appinstalled', (e) => {
+        logToUI('✅ PWA installed successfully');
+        showToast('Welcome to the Alt Text Generator app!', 'success');
+        pwaInstallBtn.style.display = 'none';
+        deferredPrompt = null;
+    });
+
+    // Check if app is already installed (running in standalone mode)
+    function checkIfInstalled() {
+        if (window.matchMedia('(display-mode: standalone)').matches || 
+            window.navigator.standalone === true) {
+            pwaInstallBtn.style.display = 'none';
+            logToUI('📱 App is running in standalone mode');
+        }
+    }
 
     // ===== THEME MANAGEMENT =====
-    // Theme handling function for inline HTML usage
     window.handleThemeToggle = function(checkbox) {
         const theme = checkbox.checked ? 'dark' : 'light';
         document.documentElement.setAttribute('data-theme', theme);
@@ -57,7 +186,6 @@ document.addEventListener('DOMContentLoaded', () => {
         logToUI(`🎨 Switched to ${theme} mode`);
     };
 
-    // Initialize theme on page load
     function initializeTheme() {
         const savedTheme = localStorage.getItem('theme') || 'light';
         const checkbox = document.getElementById('theme-toggle-checkbox');
@@ -71,20 +199,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // ===== SETTINGS MANAGEMENT =====
     function loadSettings() {
         const settings = JSON.parse(localStorage.getItem('altTextSettings') || '{}');
-        
-        optionAltText.checked = settings.altText !== false; // Default true
-        optionCaptions.checked = settings.captions === true; // Default false
-        optionCompression.checked = settings.compression === true; // Default false
-        
         return settings;
     }
 
     function saveSettings() {
-        const settings = {
-            altText: optionAltText.checked,
-            captions: optionCaptions.checked,
-            compression: optionCompression.checked
-        };
+        // Settings are now simplified since we always generate everything
+        const settings = {};
         localStorage.setItem('altTextSettings', JSON.stringify(settings));
     }
 
@@ -111,88 +231,494 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function showCompressionWarning() {
+        logToUI('📋 Setting up compression warning modal...');
         return new Promise((resolve, reject) => {
+            logToUI('📋 Creating promise for compression modal');
             compressionPromiseResolve = resolve;
             compressionPromiseReject = reject;
+            logToUI('📋 Promise handlers set, showing modal');
             compressionModal.style.display = 'flex';
+            logToUI('📋 Modal should now be visible');
         });
     }
 
     function hideCompressionWarning() {
+        logToUI('📋 Hiding compression modal...');
         compressionModal.style.display = 'none';
+        logToUI('📋 Clearing promise handlers');
         compressionPromiseResolve = null;
         compressionPromiseReject = null;
+        logToUI('📋 Modal cleanup completed');
     }
 
-    // ===== PROGRESS BAR MANAGEMENT =====
-    function showProgress(text = 'Processing...') {
-        progressContainer.style.display = 'block';
-        progressText.textContent = text;
-        progressFill.style.width = '0%';
-    }
-
-    function updateProgress(percent, text) {
-        progressFill.style.width = `${Math.min(100, Math.max(0, percent))}%`;
-        if (text) progressText.textContent = text;
-    }
-
-    function hideProgress() {
-        progressContainer.style.display = 'none';
-    }
-
-    // ===== LOG MANAGEMENT =====
+    // ===== LOGS MANAGEMENT =====
+    
     function initializeLogs() {
-        // Start with logs collapsed
-        logContent.classList.remove('expanded');
-        logToggle.classList.remove('expanded');
+        logContainer.innerHTML = '';
+        logToUI('🚀 Alt Text Generator initialized');
     }
 
-    function toggleLogs() {
-        logContent.classList.toggle('expanded');
-        logToggle.classList.toggle('expanded');
+    function showLogsOverlay() {
+        logsOverlay.style.display = 'flex';
     }
 
-    // ===== CLIPBOARD PASTE FUNCTIONALITY =====
-    function initializeClipboardPaste() {
-        // Listen for paste events on the document
-        document.addEventListener('paste', handlePaste);
+    function hideLogsOverlay() {
+        logsOverlay.style.display = 'none';
+    }
+
+    function emailLogs() {
+        const logs = Array.from(logContainer.children).map(p => p.textContent).join('\n');
+        const subject = encodeURIComponent('Alt Text Generator - Support Request');
+        const body = encodeURIComponent(`Hello,
+
+I need help with the Alt Text Generator. Here are my logs:
+
+${logs}
+
+Please help me resolve this issue.
+
+Thank you!`);
         
-        // Update upload area text to mention paste
-        const uploadText = dropArea.querySelector('p');
-        if (uploadText) {
-            uploadText.textContent = 'Drag & drop, click to browse, or paste from clipboard';
+        const mailtoLink = `mailto:dylangregoriis+alttextgenapp@gmail.com?subject=${subject}&body=${body}`;
+        
+        try {
+            window.open(mailtoLink, '_blank');
+            logToUI('📧 Email client opened with logs');
+            showToast('Email client opened with logs attached', 'success');
+        } catch (error) {
+            logToUI(`❌ Could not open email client: ${error.message}`);
+            showToast('Could not open email client', 'error');
+            
+            // Fallback: copy logs to clipboard
+            navigator.clipboard.writeText(logs).then(() => {
+                showToast('Logs copied to clipboard instead', 'warning');
+            }).catch(() => {
+                showToast('Could not copy logs to clipboard', 'error');
+            });
         }
     }
 
+    // ===== FILE HANDLING =====
+    
+    function initializeClipboardPaste() {
+        document.addEventListener('paste', handlePaste);
+        logToUI('📋 Clipboard paste support enabled');
+    }
+
     async function handlePaste(e) {
-        e.preventDefault();
-        
-        const items = e.clipboardData?.items;
-        if (!items) return;
+        const items = e.clipboardData.items;
         
         for (let item of items) {
-            if (item.type.startsWith('image/') || item.type.startsWith('video/')) {
+            if (item.type.indexOf('image') !== -1 || item.type.indexOf('video') !== -1) {
+                e.preventDefault();
                 const file = item.getAsFile();
+                
                 if (file) {
-                    logToUI(`📋 Pasted ${file.type} file from clipboard (${(file.size / 1024 / 1024).toFixed(2)}MB)`);
-                    originalFile = file;
-                    displayPreview(file);
-                    break;
+                    logToUI(`📋 Pasted ${file.type} from clipboard (${(file.size / 1024 / 1024).toFixed(2)}MB)`);
+                    handleFile(file);
+                    return;
                 }
             }
         }
     }
 
+    function preventDefaults(e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    function highlight() {
+        dropArea.classList.add('highlight');
+    }
+
+    function unhighlight() {
+        dropArea.classList.remove('highlight');
+    }
+
+    function handleDrop(e) {
+        preventDefaults(e);
+        unhighlight();
+        
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            handleFile(files[0]);
+        }
+    }
+
+    function handleFileSelect() {
+        const file = fileInput.files[0];
+        if (file) {
+            handleFile(file);
+        }
+    }
+
+    async function handleFile(file) {
+        updateStatus('Processing file...', 'processing');
+        
+        // Validate file type
+        const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp', 'video/mp4', 'video/webm', 'video/mov', 'video/avi', 'video/mkv'];
+        if (!validTypes.includes(file.type)) {
+            updateStatus('Unsupported file type', 'error');
+            showToast('Please upload a supported image or video file', 'error');
+            return;
+        }
+
+        // Validate file size
+        if (file.size > TOTAL_MEDIA_SIZE_LIMIT) {
+            updateStatus('File too large', 'error');
+            showToast('File exceeds 100MB limit', 'error');
+            return;
+        }
+
+        originalFile = file;
+
+        // Display preview and check for video sound
+        await displayPreview(file);
+        
+        updateStatus('File ready for processing', 'ready');
+        showSection(previewSection);
+    }
+
+    async function displayPreview(file) {
+        previewContent.innerHTML = '';
+        
+        if (file.type.startsWith('image/')) {
+            const img = document.createElement('img');
+            img.src = URL.createObjectURL(file);
+            img.onload = () => URL.revokeObjectURL(img.src);
+            previewContent.appendChild(img);
+            currentMediaElement = img;
+            
+            // Images don't need captions
+            logToUI('🖼️ Image file - alt text only');
+            
+        } else if (file.type.startsWith('video/')) {
+            const video = document.createElement('video');
+            video.src = URL.createObjectURL(file);
+            video.controls = true;
+            video.muted = true;
+            previewContent.appendChild(video);
+            currentMediaElement = video;
+            
+            // Check if video has audio track for captions generation
+            const hasAudio = await checkVideoHasAudio(video);
+            if (hasAudio) {
+                logToUI('🎵 Video has audio track - captions will be generated');
+            } else {
+                logToUI('🔇 Video has no audio track - no captions will be generated');
+            }
+            
+            // Store whether this video has audio for later use
+            currentMediaElement.hasAudio = hasAudio;
+        }
+    }
+
+    async function checkVideoHasAudio(videoElement) {
+        return new Promise((resolve) => {
+            const checkAudio = () => {
+                try {
+                    // Create audio context to analyze the video
+                    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    const source = audioContext.createMediaElementSource(videoElement);
+                    
+                    // If we can create a source, the video likely has audio
+                    resolve(true);
+                    audioContext.close();
+                } catch (error) {
+                    // If there's an error, assume no audio
+                    resolve(false);
+                }
+            };
+            
+            if (videoElement.readyState >= 1) {
+                checkAudio();
+            } else {
+                videoElement.addEventListener('loadedmetadata', checkAudio, { once: true });
+                setTimeout(() => resolve(false), 2000); // Timeout after 2 seconds
+            }
+        });
+    }
+
+    // ===== PROCESSING =====
+    
+    async function processMediaGeneration() {
+        try {
+            showSection(processingSection);
+            updateStatus('Starting generation process...', 'processing');
+            
+            updateProgress(5, 'Preparing file...');
+            
+            // Debug original file
+            logToUI(`🔍 Original file check: ${originalFile ? 'Present' : 'Missing'}`);
+            if (originalFile) {
+                logToUI(`📄 File details: ${originalFile.name}, ${(originalFile.size / 1024 / 1024).toFixed(2)}MB, ${originalFile.type}`);
+            }
+            
+            let fileToProcess = originalFile;
+            let compressionResults = null;
+            
+            // Handle compression if file is large
+            if (originalFile.size > COMPRESSION_THRESHOLD) {
+                logToUI('🔍 Compression needed - file size exceeds 20MB threshold');
+                if (shouldShowCompressionWarning()) {
+                    logToUI('⚠️ Need to show compression warning to user');
+                    try {
+                        logToUI('🔄 Showing compression warning...');
+                        await showCompressionWarning();
+                        logToUI('✅ User accepted compression warning - proceeding with compression');
+                    } catch (error) {
+                        logToUI(`❌ User cancelled compression warning: ${error.message}`);
+                        updateStatus('Generation cancelled', 'ready');
+                        showSection(previewSection);
+                        return;
+                    }
+                } else {
+                    logToUI('ℹ️ Compression warning disabled - proceeding directly to compression');
+                }
+                
+                updateProgress(10, 'Preparing file for compression...');
+                logToUI('🔄 Converting file to array buffer...');
+                logToUI(`📊 Original file info: ${originalFile.name} (${(originalFile.size / 1024 / 1024).toFixed(2)}MB, ${originalFile.type})`);
+                
+                try {
+                    // Add timeout for array buffer conversion
+                    const arrayBufferPromise = originalFile.arrayBuffer();
+                    const timeoutPromise = new Promise((_, reject) => {
+                        setTimeout(() => {
+                            reject(new Error('File reading timed out after 15 seconds'));
+                        }, 15000);
+                    });
+                    
+                    logToUI('⏱️ Starting array buffer conversion with 15s timeout...');
+                    const arrayBuffer = await Promise.race([arrayBufferPromise, timeoutPromise]);
+                    logToUI(`✅ File converted to buffer (${(arrayBuffer.byteLength / 1024 / 1024).toFixed(2)}MB)`);
+                    
+                    updateProgress(15, 'Starting compression...');
+                    logToUI('🔄 Calling handleCompression function...');
+                    compressionResults = await handleCompression({
+                        buffer: arrayBuffer,
+                        name: originalFile.name,
+                        size: originalFile.size,
+                        type: originalFile.type
+                    });
+                    
+                    logToUI('✅ Compression completed successfully');
+                    fileToProcess = compressionResults.blob;
+                } catch (error) {
+                    logToUI(`❌ Compression failed: ${error.message}`);
+                    logToUI(`❌ Error stack: ${error.stack}`);
+                    throw error;
+                }
+            }
+
+            updateProgress(30, 'Uploading to server...');
+            
+            // Prepare the request
+            const base64Data = await fileToBase64(fileToProcess);
+            
+            // Check if this is an animated image (like GIF) that should be treated as video-like content
+            const animatedImageTypes = ['image/gif', 'image/webp', 'image/apng'];
+            const isAnimatedImage = animatedImageTypes.includes(fileToProcess.type);
+            const isVideoContent = fileToProcess.type.startsWith('video/') || isAnimatedImage;
+            
+            // If this is a video with audio, generate captions
+            if (isVideoContent && currentMediaElement?.hasAudio) {
+                const captionRequestData = {
+                    action: 'generateCaptions',
+                    base64Data: base64Data,
+                    mimeType: fileToProcess.type
+                };
+                
+                // First, get captions
+                const captionResponse = await fetch(CLOUD_FUNCTION_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(captionRequestData)
+                });
+                
+                if (captionResponse.ok) {
+                    const captionResult = await captionResponse.json();
+                    if (captionResult.vttContent) {
+                        // Store captions for later use
+                        generatedResults = {
+                            ...(generatedResults || {}),
+                            vttContent: captionResult.vttContent
+                        };
+                        logToUI('📄 Captions generated successfully');
+                    }
+                }
+            }
+            
+            // Regular alt text request
+            const requestData = {
+                base64Data: base64Data,
+                mimeType: fileToProcess.type,
+                isVideo: isAnimatedImage // Flag animated images (like GIFs) as video-like content
+            };
+
+            updateProgress(50, 'Generating content...');
+            
+            // Make the API request
+            const response = await fetch(CLOUD_FUNCTION_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestData)
+            });
+
+            if (!response.ok) {
+                throw new Error(`Server error: ${response.status}`);
+            }
+
+            updateProgress(80, 'Processing results...');
+
+            const result = await response.json();
+            
+            updateProgress(100, 'Complete!');
+            
+            // Store results for later use - preserve existing vttContent if already set
+            generatedResults = {
+                altText: result.altText,
+                vttContent: generatedResults?.vttContent || result.vttContent,
+                compressionResults: compressionResults
+            };
+
+            // Display results
+            displayResults(result, compressionResults);
+            
+        } catch (error) {
+            logToUI(`❌ Generation error: ${error.message}`);
+            updateStatus('Generation failed', 'error');
+            showToast(`Generation failed: ${error.message}`, 'error');
+            showSection(previewSection);
+        }
+    }
+
+    function displayResults(result, compressionResults) {
+        // Show alt text
+        if (result.altText) {
+            altTextResult.textContent = result.altText;
+            updateStatus('Alt text generated successfully', 'success');
+        } else {
+            altTextResult.textContent = 'No alt text was generated.';
+            updateStatus('No content generated', 'warning');
+        }
+
+        // Show download button for .vtt file if available
+        if (generatedResults?.vttContent) {
+            downloadVttBtn.style.display = 'inline-flex';
+            logToUI('📄 Captions download button shown');
+        } else {
+            downloadVttBtn.style.display = 'none';
+        }
+
+        // Show compressed download if available
+        if (compressionResults) {
+            downloadCompressedBtn.style.display = 'inline-flex';
+            logToUI('📦 Compressed video download button shown');
+        } else {
+            downloadCompressedBtn.style.display = 'none';
+        }
+
+        showSection(resultsSection);
+    }
+
+    function autoDownloadVtt(vttContent) {
+        const blob = new Blob([vttContent], { type: 'text/vtt' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${originalFile.name.split('.')[0]}_captions.vtt`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        logToUI('📥 Captions file auto-downloaded');
+    }
+
     // ===== EVENT LISTENERS =====
     
-    // Theme toggle is handled inline in HTML
+    // File handling
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropArea.addEventListener(eventName, preventDefaults);
+    });
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropArea.addEventListener(eventName, highlight);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropArea.addEventListener(eventName, unhighlight);
+    });
+
+    dropArea.addEventListener('drop', handleDrop);
     
-    // Settings
-    optionAltText.addEventListener('change', saveSettings);
-    optionCaptions.addEventListener('change', saveSettings);
-    optionCompression.addEventListener('change', saveSettings);
+    // Handle upload button click (prevent bubbling to dropArea)
+    const uploadButton = document.getElementById('upload-button');
+    uploadButton.addEventListener('click', (e) => {
+        e.stopPropagation();
+        fileInput.click();
+    });
     
-    // Compression modal
+    // Handle drop area click (only if not clicking the button)
+    dropArea.addEventListener('click', (e) => {
+        if (e.target !== uploadButton && !uploadButton.contains(e.target)) {
+            fileInput.click();
+        }
+    });
+    
+    fileInput.addEventListener('change', handleFileSelect);
+
+    // Buttons
+    generateBtn.addEventListener('click', processMediaGeneration);
+    clearBtn.addEventListener('click', resetToUpload);
+    startOverBtn.addEventListener('click', resetToUpload);
+
+    copyBtn.addEventListener('click', () => {
+        if (generatedResults?.altText) {
+            navigator.clipboard.writeText(generatedResults.altText).then(() => {
+                showToast('Alt text copied to clipboard!', 'success');
+                logToUI('📋 Alt text copied to clipboard');
+            }).catch(err => {
+                showToast('Failed to copy to clipboard', 'error');
+                logToUI(`❌ Clipboard error: ${err.message}`);
+            });
+        }
+    });
+
+    downloadVttBtn.addEventListener('click', () => {
+        if (generatedResults?.vttContent) {
+            autoDownloadVtt(generatedResults.vttContent);
+        }
+    });
+
+    downloadCompressedBtn.addEventListener('click', () => {
+        if (generatedResults?.compressionResults) {
+            const blob = generatedResults.compressionResults.blob;
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${originalFile.name.split('.')[0]}_compressed.mp4`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            logToUI('📥 Compressed video downloaded');
+            showToast('Compressed video downloaded', 'success');
+        }
+    });
+
+    // Logs
+    viewLogsBtn.addEventListener('click', showLogsOverlay);
+    closeLogsBtn.addEventListener('click', hideLogsOverlay);
+    emailLogsBtn.addEventListener('click', emailLogs);
+
+    // Modal
     modalClose.addEventListener('click', () => {
         hideCompressionWarning();
         if (compressionPromiseReject) compressionPromiseReject(new Error('User cancelled'));
@@ -204,412 +730,81 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
     modalContinue.addEventListener('click', () => {
+        logToUI('📝 User clicked Continue button in compression modal');
         if (dontShowAgain.checked) {
-            setCookie('hideCompressionWarning', 'true', 365); // 1 year
+            setCookie('hideCompressionWarning', 'true', 30);
+            logToUI('✅ "Don\'t show again" preference saved');
         }
+        
+        // Store the resolve function before clearing it
+        const resolveFunction = compressionPromiseResolve;
+        logToUI('📝 Stored promise resolve function, resolving...');
+        
+        // Hide modal and clear promise handlers
         hideCompressionWarning();
-        if (compressionPromiseResolve) compressionPromiseResolve();
-    });
-    
-    // Log toggle
-    logHeader.addEventListener('click', toggleLogs);
-    
-    // File input and drag/drop
-    fileInput.addEventListener('change', handleFileSelect);
-
-    // Drag and drop events
-    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-        dropArea.addEventListener(eventName, preventDefaults, false);
-    });
-
-    function preventDefaults(e) {
-        e.preventDefault();
-        e.stopPropagation();
-    }
-
-    ['dragenter', 'dragover'].forEach(eventName => {
-        dropArea.addEventListener(eventName, highlight, false);
-    });
-
-    ['dragleave', 'drop'].forEach(eventName => {
-        dropArea.addEventListener(eventName, unhighlight, false);
-    });
-
-    function highlight() {
-        dropArea.classList.add('highlight');
-    }
-
-    function unhighlight() {
-        dropArea.classList.remove('highlight');
-    }
-
-    dropArea.addEventListener('drop', handleDrop, false);
-    dropArea.addEventListener('click', () => fileInput.click());
-
-    function handleDrop(e) {
-        const files = e.dataTransfer.files;
-        if (files.length > 0) {
-            originalFile = files[0];
-            displayPreview(files[0]);
-        }
-    }
-
-    generateBtn.addEventListener('click', processMediaGeneration);
-    copyBtn.addEventListener('click', copyToClipboard);
-
-    // ===== INITIALIZATION =====
-    function initialize() {
-        initializeTheme();
-        loadSettings();
-        initializeLogs();
-        initializeClipboardPaste();
-        clearLogs();
-        logToUI('🚀 Alt Text Generator ready! Upload, drag & drop, or paste media to begin.');
-    }
-
-    // ===== CORE FUNCTIONALITY (Enhanced from original) =====
-    
-    function handleFileSelect() {
-        const file = fileInput.files[0];
-        if (file) {
-            originalFile = file;
-            displayPreview(file);
-        }
-    }
-
-    function displayPreview(file) {
-        const fileSizeMB = (file.size / 1024 / 1024).toFixed(2);
-        logToUI(`📁 Selected: ${file.name} (${fileSizeMB}MB, ${file.type})`);
         
-        previewContainer.style.display = 'block';
-        optionsSection.style.display = 'block';
-        
-        // Show compression option for large files
-        if (file.size > COMPRESSION_THRESHOLD) {
-            optionCompressionItem.style.display = 'block';
-            document.getElementById('option-compression-desc').style.display = 'block';
+        // Now resolve the promise using the stored function
+        if (resolveFunction) {
+            resolveFunction();
+            logToUI('✅ Compression promise resolved successfully');
         } else {
-            optionCompressionItem.style.display = 'none';
-            document.getElementById('option-compression-desc').style.display = 'none';
+            logToUI('❌ Warning: compressionPromiseResolve was null!');
         }
-        
-        const previewHtml = file.type.startsWith('video/') 
-            ? `<video id="preview" controls><source src="${URL.createObjectURL(file)}" type="${file.type}">Your browser does not support video.</video>`
-            : `<img id="preview" src="${URL.createObjectURL(file)}" alt="Preview">`;
-        
-        previewContainer.innerHTML = `<h3>Preview</h3>${previewHtml}`;
-        currentMediaElement = document.getElementById('preview');
-        
-        // For videos, detect duration when metadata loads
-        if (file.type.startsWith('video/')) {
-            currentMediaElement.addEventListener('loadedmetadata', () => {
-                originalFile.videoDuration = currentMediaElement.duration;
-                logToUI(`🎥 Video duration detected: ${currentMediaElement.duration.toFixed(1)} seconds`);
-            });
-        }
-        generateBtn.disabled = false;
-        
-        // Validate file size
-        if (file.size > TOTAL_MEDIA_SIZE_LIMIT) {
-            updateStatus(`⚠️ File too large (${fileSizeMB}MB). Maximum size is 100MB.`, true);
-            generateBtn.disabled = true;
-        } else if (file.size > COMPRESSION_THRESHOLD) {
-            updateStatus(`ℹ️ Large file detected (${fileSizeMB}MB). Will be compressed before processing.`, false);
-        } else {
-            updateStatus(`✅ Ready to process (${fileSizeMB}MB)`, false);
-        }
-    }
+    });
 
-    // Helper function to ensure video duration is available
-    async function ensureVideoDuration(file) {
-        if (!file.type.startsWith('video/')) {
-            return null; // Not a video
-        }
-        
-        if (file.videoDuration && file.videoDuration > 0) {
-            return file.videoDuration; // Already detected
-        }
-        
-        // Wait for duration to be detected if video element exists
-        if (currentMediaElement && currentMediaElement.tagName === 'VIDEO') {
-            return new Promise((resolve) => {
-                if (currentMediaElement.duration && !isNaN(currentMediaElement.duration)) {
-                    file.videoDuration = currentMediaElement.duration;
-                    resolve(currentMediaElement.duration);
-                } else {
-                    const handler = () => {
-                        file.videoDuration = currentMediaElement.duration;
-                        logToUI(`🎥 Video duration detected: ${currentMediaElement.duration.toFixed(1)} seconds`);
-                        currentMediaElement.removeEventListener('loadedmetadata', handler);
-                        resolve(currentMediaElement.duration);
-                    };
-                    currentMediaElement.addEventListener('loadedmetadata', handler);
-                }
-            });
-        }
-        
-        return null; // Couldn't detect duration
-    }
 
-    async function processMediaGeneration() {
-        if (!originalFile) return;
-        
-        const settings = {
-            altText: optionAltText.checked,
-            captions: optionCaptions.checked,
-            compression: optionCompression.checked
-        };
-        
-        // Check if we need to show compression warning
-        if (originalFile.size > COMPRESSION_THRESHOLD && shouldShowCompressionWarning()) {
-            try {
-                await showCompressionWarning();
-            } catch (error) {
-                logToUI('❌ Processing cancelled by user');
-                return;
-            }
-        }
-        
+
+    // ===== UTILITY FUNCTIONS =====
+    
+    async function fetchAppVersion() {
         try {
-            generateBtn.disabled = true;
-            copyBtn.disabled = true;
-            downloadBtn.disabled = true;
+            const response = await fetch('/api/version');
+            const data = await response.json();
+            appVersion = data.version;
+            logToUI(`🎯 App version: v${appVersion}`);
             
-            let processedFile = originalFile;
-            let compressionResults = null;
-            
-            showProgress('Preparing file...');
-            updateProgress(10, 'Checking file size...');
-            
-            // Handle compression if needed
-            if (originalFile.size > SINGLE_FILE_UPLOAD_LIMIT) {
-                updateProgress(20, 'Starting compression...');
-                logToUI(`🔄 File size (${(originalFile.size / 1024 / 1024).toFixed(2)}MB) exceeds upload limit. Starting compression...`);
-                
-                try {
-                    compressionResults = await handleCompression({
-                        buffer: await originalFile.arrayBuffer(),
-                        name: originalFile.name,
-                        size: originalFile.size,
-                        type: originalFile.type
-                    });
-                    
-                    processedFile = compressionResults.blob;
-                    updateProgress(60, 'Compression complete! Uploading...');
-                    logToUI(`✅ Compression complete: ${(originalFile.size / 1024 / 1024).toFixed(2)}MB → ${(processedFile.size / 1024 / 1024).toFixed(2)}MB`);
-                } catch (error) {
-                    throw new Error(`Compression failed: ${error.message}`);
-                }
+            // Update footer version display
+            const versionElement = document.getElementById('app-version');
+            if (versionElement) {
+                versionElement.textContent = `v${appVersion}`;
             }
-            
-            updateProgress(70, 'Uploading to AI service...');
-            
-            // Convert to base64 for API
-            const base64Data = await fileToBase64(processedFile);
-            updateProgress(80, 'Generating content...');
-            
-            let result = {};
-            
-            // Generate alt text if requested
-            if (settings.altText) {
-                const altTextResponse = await fetch(CLOUD_FUNCTION_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        base64Data: base64Data,
-                        mimeType: processedFile.type,
-                        filename: originalFile.name,
-                        fileSize: originalFile.size
-                    })
-                });
-                
-                if (!altTextResponse.ok) {
-                    // Try to get detailed error message from response
-                    let errorMessage = `Alt text generation failed: ${altTextResponse.status}`;
-                    try {
-                        const errorData = await altTextResponse.json();
-                        if (errorData.error) {
-                            errorMessage += ` - ${errorData.error}`;
-                        }
-                    } catch (e) {
-                        // If JSON parsing fails, add status text
-                        errorMessage += ` ${altTextResponse.statusText}`;
-                    }
-                    logToUI(`🚨 Server Error Details: ${errorMessage}`);
-                    throw new Error(errorMessage);
-                }
-                
-                const altTextResult = await altTextResponse.json();
-                result.altText = altTextResult.altText;
-            }
-            
-            // Generate captions if requested
-            if (settings.captions && processedFile.type.startsWith('video/')) {
-                updateProgress(85, 'Generating captions...');
-                
-                // Ensure video duration is available for better caption generation
-                const videoDuration = await ensureVideoDuration(originalFile);
-                logToUI(`🎥 Using video duration: ${videoDuration ? videoDuration.toFixed(1) + ' seconds' : 'unknown'}`);
-                
-                const captionsResponse = await fetch(CLOUD_FUNCTION_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        action: 'generateCaptions',
-                        base64Data: base64Data,
-                        mimeType: processedFile.type,
-                        duration: videoDuration || null,
-                        filename: originalFile.name,
-                        fileSize: originalFile.size
-                    })
-                });
-                
-                if (!captionsResponse.ok) {
-                    // Try to get detailed error message from response
-                    let errorMessage = `Caption generation failed: ${captionsResponse.status}`;
-                    try {
-                        const errorData = await captionsResponse.json();
-                        if (errorData.error) {
-                            errorMessage += ` - ${errorData.error}`;
-                        }
-                    } catch (e) {
-                        // If JSON parsing fails, add status text
-                        errorMessage += ` ${captionsResponse.statusText}`;
-                    }
-                    logToUI(`🚨 Server Error Details: ${errorMessage}`);
-                    throw new Error(errorMessage);
-                }
-                
-                const captionsResult = await captionsResponse.json();
-                result.vttContent = captionsResult.vttContent;
-            }
-            
-            updateProgress(100, 'Complete!');
-            hideProgress();
-            
-            // Display results
-            displayResults(result, settings, compressionResults);
-            
         } catch (error) {
-            hideProgress();
-            const errorMsg = `❌ Error: ${error.message}`;
-            updateStatus(errorMsg, true);
-            logToUI(errorMsg);
-        } finally {
-            generateBtn.disabled = false;
-        }
-    }
-
-    function displayResults(result, settings, compressionResults) {
-        let displayText = '';
-        let downloadData = null;
-        
-        if (settings.altText && result.altText) {
-            displayText += `🖼️ Alt Text:\n${result.altText}\n\n`;
+            logToUI('⚠️ Could not fetch app version');
+            appVersion = 'unknown';
             
-            if (settings.altText) {
-                // Auto-copy to clipboard if alt text is enabled
-                navigator.clipboard.writeText(result.altText).then(() => {
-                    showToast('✅ Alt text copied to clipboard!', 'success');
-                }).catch(() => {
-                    logToUI('⚠️ Could not auto-copy to clipboard');
-                });
+            // Update footer with unknown version
+            const versionElement = document.getElementById('app-version');
+            if (versionElement) {
+                versionElement.textContent = 'v?.?.?';
             }
         }
-        
-        if (settings.captions && result.vttContent) {
-            displayText += `🎥 Captions:\n${result.vttContent}\n\n`;
-            downloadData = {
-                content: result.vttContent,
-                filename: `${originalFile.name.split('.')[0]}_captions.vtt`,
-                type: 'text/vtt'
-            };
-        }
-        
-        if (compressionResults && settings.compression) {
-            displayText += `📦 Compressed file available for download\n`;
-            displayText += `Original: ${(compressionResults.originalSize / 1024 / 1024).toFixed(2)}MB → Compressed: ${(compressionResults.blob.size / 1024 / 1024).toFixed(2)}MB\n\n`;
-            
-            if (!downloadData) {
-                downloadData = {
-                    blob: compressionResults.blob,
-                    filename: `compressed_${originalFile.name}`,
-                    type: compressionResults.blob.type
-                };
-            }
-        }
-        
-        resultBox.textContent = displayText || 'No content generated with current settings.';
-        
-        // Enable buttons
-        copyBtn.disabled = !result.altText;
-        
-        if (downloadData) {
-            downloadBtn.style.display = 'inline-block';
-            downloadBtn.disabled = false;
-            downloadBtn.onclick = () => downloadFile(downloadData);
-        } else {
-            downloadBtn.style.display = 'none';
-        }
-        
-        updateStatus('✅ Generation complete!', false);
-        logToUI('🎉 Content generation completed successfully!');
     }
-
-    function downloadFile(data) {
-        const blob = data.blob || new Blob([data.content], { type: data.type });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = data.filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        
-        showToast(`💾 Downloaded: ${data.filename}`, 'success');
-    }
-
-    // ===== UTILITY FUNCTIONS (Enhanced from original) =====
     
     function logToUI(message) {
-        console.log(message);
-        const logEntry = document.createElement('p');
-        logEntry.innerHTML = `[${new Date().toLocaleTimeString()}] ${message}`;
-        logContainer.appendChild(logEntry);
+        const p = document.createElement('p');
+        const timestamp = new Date().toLocaleTimeString();
+        p.textContent = `[${timestamp}] ${message}`;
+        logContainer.appendChild(p);
         logContainer.scrollTop = logContainer.scrollHeight;
-        
-        // Auto-expand logs if there's an error
-        if (message.includes('❌') || message.includes('Error')) {
-            if (!logContent.classList.contains('expanded')) {
-                toggleLogs();
-            }
-        }
     }
 
-    function clearLogs() {
-        logContainer.innerHTML = '';
-    }
-
-    function updateStatus(message, isError = false) {
-        const statusElement = statusBox;
-        statusElement.textContent = message;
-        statusElement.style.color = isError ? 'var(--error-color)' : 'var(--text-secondary)';
-        statusElement.style.display = message ? 'block' : 'none';
-        logToUI(message);
-    }
-
-    // FFmpeg initialization and loading (Enhanced from original)
     async function loadFFmpeg() {
         if (ffmpegLoaded) {
             logToUI('FFmpeg is already loaded.');
-            return ffmpeg;
+            return { ffmpeg, fetchFile: FFmpeg.fetchFile };
         }
         
         try {
             logToUI('⚙️ Loading FFmpeg...');
+            
+            // Check if FFmpeg is available
+            if (typeof FFmpeg === 'undefined') {
+                throw new Error('FFmpeg library not loaded. Please refresh the page and try again.');
+            }
+            
             const { createFFmpeg, fetchFile } = FFmpeg;
             
+            logToUI('⚙️ Creating FFmpeg instance...');
             ffmpeg = createFFmpeg({
                 corePath: `${window.location.origin}/assets/ffmpeg/ffmpeg-core.js`,
                 log: true,
@@ -626,32 +821,44 @@ document.addEventListener('DOMContentLoaded', () => {
                 },
             });
             
-            await ffmpeg.load();
+            logToUI('⚙️ Loading FFmpeg core...');
+            
+            // Add a timeout to prevent indefinite hanging
+            const loadPromise = ffmpeg.load();
+            const timeoutPromise = new Promise((_, reject) => {
+                setTimeout(() => {
+                    reject(new Error('FFmpeg loading timed out after 30 seconds. Please refresh the page and try again.'));
+                }, 30000);
+            });
+            
+            await Promise.race([loadPromise, timeoutPromise]);
             ffmpegLoaded = true;
             logToUI('✅ FFmpeg loaded successfully!');
             return { ffmpeg, fetchFile };
         } catch (error) {
             logToUI(`❌ Error loading FFmpeg: ${error.message}`);
+            logToUI('💡 Try refreshing the page if the problem persists');
             throw error;
         }
     }
     
-    // Compression handler (Enhanced from original)
     async function handleCompression(fileData) {
         try {
             logToUI('🔄 Main thread received file for compression');
+            updateProgress(16, 'Loading FFmpeg...');
             
             const { ffmpeg, fetchFile } = await loadFFmpeg();
+            logToUI('✅ FFmpeg loaded, starting compression process');
             
             const { buffer, name, size, type } = fileData;
             const originalSizeMB = (size / 1024 / 1024).toFixed(2);
             logToUI(`🔄 Starting compression of ${name} (${originalSizeMB}MB)`);
             
-            // Convert ArrayBuffer to Uint8Array for FFmpeg
+            updateProgress(17, 'Writing file to FFmpeg filesystem...');
             const fileBytes = new Uint8Array(buffer);
             ffmpeg.FS('writeFile', name, fileBytes);
+            logToUI('✅ File written to FFmpeg filesystem');
             
-            // Tiered compression settings
             const qualitySettings = {
                 codec: 'libx264',
                 crf: 28,
@@ -692,17 +899,21 @@ document.addEventListener('DOMContentLoaded', () => {
             ffmpegArgs.push('-movflags', qualitySettings.movflags, 'output.mp4');
             
             logToUI(`⚙️ Running FFmpeg command: ${ffmpegArgs.join(' ')}`);
+            updateProgress(18, 'Running FFmpeg compression...');
             
             await ffmpeg.run(...ffmpegArgs);
+            logToUI('✅ FFmpeg compression completed');
             
+            updateProgress(25, 'Reading compressed file...');
             const data = ffmpeg.FS('readFile', 'output.mp4');
             const compressedBlob = new Blob([data.buffer], { type: 'video/mp4' });
             
             logToUI(`✅ FFmpeg processing finished. Original: ${originalSizeMB}MB → Compressed: ${(compressedBlob.size / 1024 / 1024).toFixed(2)}MB`);
             
-            // Cleanup filesystem
+            updateProgress(26, 'Cleaning up temporary files...');
             ffmpeg.FS('unlink', name);
             ffmpeg.FS('unlink', 'output.mp4');
+            logToUI('✅ Temporary files cleaned up');
             
             return {
                 blob: compressedBlob,
@@ -719,7 +930,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const reader = new FileReader();
             reader.readAsDataURL(file);
             reader.onload = () => {
-                // Remove the data URL prefix (e.g., "data:image/jpeg;base64,")
                 const base64 = reader.result.split(',')[1];
                 resolve(base64);
             };
@@ -727,25 +937,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function copyToClipboard() {
-        const text = resultBox.textContent;
-        if (!text || text.includes('Generated alt text')) return;
-        
-        // Extract just the alt text part
-        const altTextMatch = text.match(/🖼️ Alt Text:\n(.*?)(?:\n\n|$)/s);
-        const textToCopy = altTextMatch ? altTextMatch[1] : text;
-        
-        navigator.clipboard.writeText(textToCopy).then(() => {
-            showToast('✅ Copied to clipboard!', 'success');
-            logToUI('📋 Alt text copied to clipboard');
-        }).catch(err => {
-            showToast('❌ Failed to copy to clipboard', 'error');
-            logToUI(`❌ Clipboard error: ${err.message}`);
-        });
-    }
-
     function showToast(message, type = 'success', duration = 3000) {
-        // Remove existing toasts
         const existingToasts = document.querySelectorAll('.toast');
         existingToasts.forEach(toast => toast.remove());
         
@@ -758,6 +950,25 @@ document.addEventListener('DOMContentLoaded', () => {
             toast.style.animation = 'toastSlideOut 0.3s ease forwards';
             setTimeout(() => toast.remove(), 300);
         }, duration);
+    }
+
+    // ===== INITIALIZATION =====
+    
+    async function initialize() {
+        initializeTheme();
+        loadSettings();
+        checkIfInstalled();
+        initializeLogs();
+        initializeClipboardPaste();
+        
+        // Fetch app version first
+        await fetchAppVersion();
+        
+        // Start with upload section
+        showSection(uploadSection);
+        updateStatus('Ready to generate alt text', 'ready');
+        
+        logToUI(`✅ Application initialized successfully (v${appVersion || 'unknown'})`);
     }
 
     // Initialize the application

@@ -4,6 +4,9 @@ const path = require('path');
 const app = express();
 const port = process.env.PORT || 8080;
 
+// Read package.json for version info
+const packageJson = require('./package.json');
+
 // Set required headers for all responses *before* serving files.
 app.use((req, res, next) => {
   res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
@@ -16,6 +19,11 @@ app.use((req, res, next) => {
   res.setHeader('Surrogate-Control', 'no-store');
   
   next();
+});
+
+// API endpoint to get version
+app.get('/api/version', (req, res) => {
+  res.json({ version: packageJson.version });
 });
 
 // Serve static files from the 'public' directory with no caching
@@ -39,6 +47,17 @@ app.get('/', (req, res) => {
     'Surrogate-Control': 'no-store'
   });
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Route for the privacy policy page
+app.get('/privacy', (req, res) => {
+  res.set({
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+    'Surrogate-Control': 'no-store'
+  });
+  res.sendFile(path.join(__dirname, 'public', 'privacy.html'));
 });
 
 // Catch-all to support SPA routing

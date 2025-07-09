@@ -18,7 +18,7 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <!-- Font Awesome Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.7.2/css/all.min.css" crossorigin="anonymous">
     <link rel="stylesheet" href="/css/style.css">
     <script>
         // Add cache-busting to CSS and scripts on page load
@@ -43,185 +43,215 @@
     </script>
 </head>
 <body>
-    <!-- Development Banner -->
-    <div class="dev-banner" id="dev-banner">
-        <div class="dev-banner-content">
-            <i class="fas fa-tools"></i>
-            <span class="dev-banner-text">
-                ⚠️ This site is in active development and may currently be unstable. 
-                <a href="https://chromewebstore.google.com/detail/bdgpkmjnfildfjhpjagjibfnfpdieddp" target="_blank">Try our stable Chrome extension</a> for the best experience.
-            </span>
-            <button class="dev-banner-close" onclick="document.getElementById('dev-banner').style.display='none'">×</button>
-        </div>
-    </div>
-    
-    <header>
-        <div class="theme-toggle-wrapper">
-            <input type="checkbox" id="theme-toggle-checkbox" class="theme-toggle-input" onchange="handleThemeToggle(this)">
-            <label for="theme-toggle-checkbox" class="theme-toggle">
-                <span class="sr-only">Toggle between light and dark themes</span>
-                <div class="theme-toggle-track">
-                    <div class="theme-toggle-thumb">
-                        <i class="theme-icon sun fas fa-sun"></i>
-                        <i class="theme-icon moon fas fa-moon"></i>
+
+    <div class="app-container">
+        <header>
+            <div class="theme-toggle-wrapper">
+                <input type="checkbox" id="theme-toggle-checkbox" class="theme-toggle-input" onchange="handleThemeToggle(this)">
+                <label for="theme-toggle-checkbox" class="theme-toggle">
+                    <span class="sr-only">Toggle between light and dark themes</span>
+                    <div class="theme-toggle-track">
+                        <div class="theme-toggle-thumb">
+                            <i class="theme-icon sun fas fa-sun"></i>
+                            <i class="theme-icon moon fas fa-moon"></i>
+                        </div>
                     </div>
-                </div>
-            </label>
-        </div>
-        <div class="header-title">
-            <img src="/icons/gen-alt-text.svg" alt="App Icon" class="app-icon">
-            <h1>Bluesky Alt Text Generator</h1>
-        </div>
-        <p class="subtitle">Automatically generate detailed, accessible alt text & captions for your Bluesky images & videos using Google Gemini AI.</p>
-    </header>
+                </label>
+            </div>
+            <div class="header-title">
+                <img src="/icons/gen-alt-text.svg" alt="App Icon" class="app-icon">
+                <h1>Bluesky Alt Text Generator</h1>
+            </div>
+            <p class="subtitle">Automatically generate detailed, accessible alt text & captions for your Bluesky images & videos using Google Gemini AI.</p>
+        </header>
 
-    <!-- Info Block -->
-    <section class="info-block">
-        <h3>📋 How it works & what you need to know</h3>
-        <div class="info-grid">
-            <div class="info-item">
-                <h4>📁 Supported File Formats</h4>
-                <ul>
-                    <li>Images: JPEG, PNG, GIF, WebP, BMP</li>
-                    <li>Videos: MP4, WebM, MOV, AVI, MKV</li>
-                    <li>Animations: GIF, WebM, short MP4s</li>
-                </ul>
-            </div>
-            <div class="info-item">
-                <h4>⚖️ File Size & Compression</h4>
-                <p>Maximum file size: <strong>100MB</strong></p>
-                <p>Files larger than 20MB are automatically compressed locally on your device before processing. This ensures faster uploads and processing while maintaining quality.</p>
-            </div>
-            <div class="info-item">
-                <h4>♿ Why Alt Text & Captions Matter</h4>
-                <p><strong>Alt text</strong> describes images for screen readers, helping visually impaired users understand visual content.</p>
-                <p><strong>Captions</strong> provide video descriptions and dialogue transcription for accessibility and better engagement.</p>
-            </div>
-        </div>
-    </section>
-
-    <main class="container">
-        <div class="main-content">
-            <section class="upload-section">
+        <main class="main-workflow">
+            <!-- Upload Section -->
+            <section class="upload-section" id="upload-section">
                 <div id="drop-area" class="upload-area">
-                    <div class="upload-icon">📷</div>
-                    <h3>Upload or Paste Media</h3>
-                    <p>Drag & drop, click to browse, or paste from clipboard</p>
+                    <div class="upload-icon">
+                        <i class="fas fa-photo-video"></i>
+                    </div>
+                    <h3>Upload Media</h3>
+                    <p class="upload-description">
+                        <strong>Supported:</strong> JPEG, PNG, GIF, WebP, MP4, WebM, MOV<br>
+                        <strong>Max size:</strong> 100MB
+                    </p>
+                    <div class="upload-actions">
+                        <button class="upload-btn" id="upload-button">
+                            <i class="fas fa-upload"></i> Choose File
+                        </button>
+                        <span class="upload-or">or drag & drop or paste from clipboard</span>
+                    </div>
                     <input type="file" id="file-input" hidden accept="image/*,video/*">
                 </div>
-                <div class="preview-container" style="display: none;">
-                    <h3>Preview</h3>
-                    <!-- Preview will be inserted here -->
+            </section>
+
+            <!-- Preview & Options Section -->
+            <section class="preview-section" id="preview-section" style="display: none;">
+                <div class="preview-container">
+                    <div class="preview-content" id="preview">
+                        <!-- Preview will be inserted here -->
+                    </div>
                 </div>
                 
-                <!-- Options Section -->
-                <div class="options-section" id="options-section" style="display: none;">
-                    <h4>⚙️ Generation Options</h4>
-                    <div class="option-item">
-                        <input type="checkbox" id="option-alt-text" checked>
-                        <label for="option-alt-text">Generate & copy alt text to clipboard</label>
-                    </div>
-                    <div class="option-description">
-                        Perfect for social media posts and accessibility
-                    </div>
-                    
-                    <div class="option-item">
-                        <input type="checkbox" id="option-captions">
-                        <label for="option-captions">Generate & download captions file (.vtt)</label>
-                    </div>
-                    <div class="option-description">
-                        Ideal for video content with dialogue or narration
-                    </div>
-                    
-                    <div class="option-item" id="option-compression-item" style="display: none;">
-                        <input type="checkbox" id="option-compression">
-                        <label for="option-compression">Download compressed media file</label>
-                    </div>
-                    <div class="option-description" id="option-compression-desc" style="display: none;">
-                        Get the compressed version of your large file
-                    </div>
-                </div>
 
-                <div class="button-group">
-                    <button id="generate-btn" disabled>🚀 Generate</button>
+
+                <div class="action-buttons">
+                    <button id="generate-btn" class="generate-btn">
+                        <i class="fas fa-magic"></i>
+                        Generate
+                    </button>
+                    <button id="clear-btn" class="clear-btn">
+                        <i class="fas fa-times"></i>
+                        Clear
+                    </button>
                 </div>
             </section>
             
-            <section class="result-section">
-                <h2>Generated Content</h2>
-                
-                <!-- Progress Container -->
-                <div class="progress-container" id="progress-container" style="display: none;">
-                    <div class="progress-bar">
-                        <div class="progress-fill" id="progress-fill"></div>
+            <!-- Processing Section -->
+            <section class="processing-section" id="processing-section" style="display: none;">
+                <div class="processing-container">
+                    <div class="processing-animation">
+                        <div class="processing-spinner"></div>
                     </div>
-                    <div class="progress-text" id="progress-text">Initializing...</div>
-                </div>
-                
-                <div class="status-box" id="status-message" style="display: none;">
-                    Processing... Please wait.
-                </div>
-                <div class="result-box" id="result">
-                    <p style="color: var(--text-muted);">Generated alt text and captions will appear here...</p>
-                </div>
-                <div class="button-group">
-                    <button id="copy-btn" class="btn-secondary" disabled>📋 Copy to Clipboard</button>
-                    <button id="download-btn" class="btn-secondary" style="display: none;" disabled>💾 Download</button>
+                    <div class="processing-progress">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progress-fill"></div>
+                        </div>
+                        <div class="progress-text" id="progress-text">Initializing...</div>
+                    </div>
                 </div>
             </section>
-        </div>
 
-        <!-- Collapsible Log Section -->
-        <section class="log-section">
-            <div class="log-header" id="log-header">
-                <h2>Processing Logs</h2>
-                <button class="log-toggle" id="log-toggle">▼</button>
+            <!-- Results Section -->
+            <section class="results-section" id="results-section" style="display: none;">
+                <div class="results-container">
+                    <h2>Generated Alt Text</h2>
+                    <div class="alt-text-result" id="alt-text-result">
+                        <!-- Alt text will appear here -->
+                    </div>
+                    
+                    <div class="results-actions">
+                        <button id="copy-btn" class="copy-btn">
+                            <i class="fas fa-copy"></i>
+                            Copy to Clipboard
+                        </button>
+                        <button id="download-vtt-btn" class="download-btn" style="display: none;">
+                            <i class="fas fa-download"></i>
+                            Download Captions
+                        </button>
+                        <button id="download-compressed-btn" class="download-btn" style="display: none;">
+                            <i class="fas fa-download"></i>
+                            Download Compressed Video
+                        </button>
+                    </div>
+                    
+                    <button id="start-over-btn" class="start-over-btn">
+                        <i class="fas fa-redo"></i>
+                        Start Over
+                    </button>
+                </div>
+            </section>
+        </main>
+
+        <!-- Compact Status Bar -->
+        <div class="status-bar" id="status-bar">
+            <div class="status-indicator">
+                <div class="status-dot" id="status-dot"></div>
+                <span class="status-text" id="status-text">Ready to generate alt text</span>
             </div>
-            <div class="log-content" id="log-content">
-                <div id="log-container" class="log-box"></div>
-            </div>
-        </section>
-    </main>
+            <button id="view-logs-btn" class="logs-btn">
+                <i class="fas fa-list"></i>
+            </button>
+        </div>
+    </div>
     
     <footer>
         <div class="footer-links">
+            <button id="pwa-install-btn" class="footer-link pwa-install-btn" style="display: none;">
+                <i class="fas fa-download"></i>
+                <div class="footer-link-text">
+                    <span class="footer-link-title">Web App</span>
+                    <span class="footer-link-desc">Add this page to your device as a progressive web app.</span>
+                </div>
+            </button>
             <a href="https://chromewebstore.google.com/detail/bdgpkmjnfildfjhpjagjibfnfpdieddp" target="_blank" class="footer-link">
                 <i class="fab fa-chrome"></i>
-                <span>Chrome Extension</span>
+                <div class="footer-link-text">
+                    <span class="footer-link-title">Chrome Extension</span>
+                    <span class="footer-link-desc">Download the Extension from the Chrome Web Store.</span>
+                </div>
             </a>
             <a href="https://addons.mozilla.org/en-US/firefox/addon/bluesky-alt-text-generator/" target="_blank" class="footer-link">
                 <i class="fab fa-firefox-browser"></i>
-                <span>Firefox Add-on</span>
+                <div class="footer-link-text">
+                    <span class="footer-link-title">Firefox Add-on</span>
+                    <span class="footer-link-desc">Download the Add-on for both desktop & Android.</span>
+                </div>
             </a>
-            <a href="https://bsky.app/profile/symm.app" target="_blank" class="footer-link">
-                <svg class="bluesky-icon" viewBox="0 0 568 501" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M123.121 33.664C188.241 82.553 258.281 181.68 284 234.873c25.719-53.192 95.759-152.32 160.879-201.209C491.866-1.611 568-28.906 568 57.947c0 17.346-9.945 145.713-15.778 166.555-20.275 72.453-94.155 90.933-159.875 79.748C507.222 323.8 536.444 388.56 473.333 453.32c-119.86 122.992-172.272-30.859-185.702-70.281-2.462-7.227-3.614-10.608-3.631-7.733-.017-2.875-1.169.506-3.631 7.733-13.43 39.422-65.842 193.273-185.702 70.281-63.111-64.76-33.889-129.52 80.986-149.07-65.72 11.185-139.6-7.295-159.875-79.748C9.945 203.66 0 75.293 0 57.947 0-28.906 76.134-1.611 123.121 33.664z"/>
-                </svg>
-                <span>@symm.app</span>
+            <a href="#" class="footer-link footer-link-disabled">
+                <i class="fab fa-safari"></i>
+                <div class="footer-link-text">
+                    <span class="footer-link-title">Safari Extension</span>
+                    <span class="footer-link-desc">Coming soon!</span>
+                </div>
             </a>
             <a href="https://github.com/symmetricalboy/gen-alt-text" target="_blank" class="footer-link">
                 <i class="fab fa-github"></i>
-                <span>Open Source</span>
+                <div class="footer-link-text">
+                    <span class="footer-link-title">GitHub Repository</span>
+                    <span class="footer-link-desc">View the complete open source MIT licensed code.</span>
+                </div>
+            </a>
+            <a href="https://bsky.app/profile/symm.app" target="_blank" class="footer-link">
+                <i class="fab fa-bluesky"></i>
+                <div class="footer-link-text">
+                    <span class="footer-link-title">Help & Feedback</span>
+                    <span class="footer-link-desc">Visit @symm.app on Bluesky for assistance & updates.</span>
+                </div>
             </a>
         </div>
         <div class="footer-info">
             <p>Free & open source, for all, forever.</p>
             <p>Copyright © 2025 Dylan Gregori Singer (symmetricalboy)</p>
+            <p><a href="/privacy" style="color: var(--primary-blue); text-decoration: none;">Privacy Policy</a></p>
+            <p class="app-version" id="app-version">v1.0.0</p>
         </div>
     </footer>
+
+    <!-- Logs Overlay -->
+    <div id="logs-overlay" class="logs-overlay" style="display: none;">
+        <div class="logs-modal">
+            <div class="logs-modal-header">
+                <h3>Processing Logs</h3>
+                <div class="logs-modal-actions">
+                    <button id="email-logs-btn" class="btn-secondary">
+                        <i class="fas fa-envelope"></i>
+                        Email logs to support
+                    </button>
+                    <button id="close-logs-btn" class="logs-close-btn">×</button>
+                </div>
+            </div>
+            <div class="logs-modal-content">
+                <div id="log-container" class="log-box"></div>
+            </div>
+        </div>
+    </div>
 
     <!-- Compression Warning Modal -->
     <div id="compression-modal" class="modal-overlay" style="display: none;">
         <div class="modal">
             <button class="modal-close" id="modal-close">×</button>
-            <h3>🔄 Large File Processing Notice</h3>
-            <p>While we can process media up to 100MB, files larger than 20MB must be compressed locally on your device before processing.</p>
+            <h3><i class="fas fa-compress-alt"></i> Large File Processing Notice</h3>
+            <p>In order for our server to handle files larger than 20MB, we need to compress large videos locally on your device before processing.</p>
             <p><strong>This process:</strong></p>
             <ul style="margin: 1rem 0; padding-left: 1.5rem; color: var(--text-secondary);">
                 <li>Happens entirely on your machine (private & secure)</li>
                 <li>May take 2-3 minutes for very large files</li>
                 <li>Requires you to stay on this page during processing</li>
             </ul>
+            <p><strong>Bonus:</strong> You can also save the compressed file afterwards, which may be more convenient to share!</p>
             <p>Ready to continue?</p>
             <div class="modal-checkbox">
                 <input type="checkbox" id="dont-show-again">
@@ -229,7 +259,7 @@
             </div>
             <div class="modal-buttons">
                 <button id="modal-cancel" class="btn-secondary">Cancel</button>
-                <button id="modal-continue">Continue</button>
+                <button id="modal-continue" class="generate-btn">Continue</button>
             </div>
         </div>
     </div>
