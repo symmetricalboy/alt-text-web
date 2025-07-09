@@ -1391,7 +1391,7 @@ body {
     }
     
     .kofi-donation-link:hover {
-        transform: scale(1.25);
+        transform: scale(1.2);
         animation: kofi-mobile-jiggle 1s ease-in-out;
     }
     
@@ -1405,8 +1405,8 @@ body {
     }
     
     .kofi-heart {
-        font-size: 8px;
-        top: 4px;
+        font-size: 7.5px;
+        top: 4.5px;
     }
 }
 
