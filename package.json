@@ -1,0 +1,15 @@
+{
+  "name": "alt-text-web",
+  "version": "1.0.0",
+  "description": "Automatically generate detailed, accessible alt text & captions for images, videos, & gifs, using Google Gemini AI.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "engines": {
+    "node": "18"
+  }
+} 

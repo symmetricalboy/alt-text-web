@@ -1,0 +1,446 @@
+<!DOCTYPE html><html lang="en"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- HTML Meta Tags -->
+    <title>Bluesky Alt Text Generator</title>
+    <meta name="description" content="Automatically generate detailed alt text & captions for images & videos using Google Gemini AI.">
+    <!-- Facebook Meta Tags -->
+    <meta property="og:url" content="https://alttext.symm.app">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Bluesky Alt Text Generator">
+    <meta property="og:description" content="Automatically generate detailed alt text & captions for images & videos using Google Gemini AI.">
+    <meta property="og:image" content="https://opengraph.b-cdn.net/production/images/54d3ff1f-c045-4229-ba2d-860c014cbe75.png?token=4Cn-vfK1O_6BIMiGAwlxZ-tOTlfXZLnmyjdhslcqrvk&height=630&width=1200&expires=33288040983">
+
+    <!-- Twitter Meta Tags -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta property="twitter:domain" content="alttext.symm.app">
+    <meta property="twitter:url" content="https://alttext.symm.app">
+    <meta name="twitter:title" content="Bluesky Alt Text Generator">
+    <meta name="twitter:description" content="Automatically generate detailed alt text & captions for images & videos using Google Gemini AI.">
+    <meta name="twitter:image" content="https://opengraph.b-cdn.net/production/images/54d3ff1f-c045-4229-ba2d-860c014cbe75.png?token=4Cn-vfK1O_6BIMiGAwlxZ-tOTlfXZLnmyjdhslcqrvk&height=630&width=1200&expires=33288040983">
+
+    <!-- Meta Tags Generated via https://www.opengraph.xyz -->
+    
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#0085ff">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Alt Text">
+    <link rel="apple-touch-icon" href="/icons/full-bleed-icon-128.png">
+    <!-- Security headers for SharedArrayBuffer support -->
+    <meta http-equiv="Cross-Origin-Embedder-Policy" content="require-corp">
+    <meta http-equiv="Cross-Origin-Opener-Policy" content="same-origin">
+    <!-- Disable caching for development -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.7.2/css/all.min.css" crossorigin="anonymous">
+    <link rel="stylesheet" href="/css/style.css">
+    <script>
+        // Add cache-busting to CSS and scripts on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            const timestamp = Date.now();
+            
+            // Update CSS link with cache-buster
+            const cssLink = document.querySelector('link[href="/css/style.css"]');
+            if (cssLink) {
+                cssLink.href = `/css/style.css?v=${timestamp}`;
+            }
+            
+            // Update script sources with cache-buster
+            const scripts = document.querySelectorAll('script[src^="/"]');
+            scripts.forEach(script => {
+                const originalSrc = script.src;
+                if (originalSrc && !originalSrc.includes('?v=')) {
+                    script.src = `${originalSrc}?v=${timestamp}`;
+                }
+            });
+        });
+    </script>
+</head>
+<body>
+
+    <div class="app-container">
+        <header>
+            <div class="header-controls">
+                <div class="theme-toggle-wrapper">
+                    <input type="checkbox" id="theme-toggle-checkbox" class="theme-toggle-input" onchange="handleThemeToggle(this)">
+                    <label for="theme-toggle-checkbox" class="theme-toggle">
+                        <span class="sr-only">Toggle between light and dark themes</span>
+                        <div class="theme-toggle-track">
+                            <div class="theme-toggle-thumb">
+                                <i class="theme-icon sun fas fa-sun"></i>
+                                <i class="theme-icon moon fas fa-moon"></i>
+                            </div>
+                        </div>
+                    </label>
+                </div>
+                <button class="settings-btn" id="settings-btn" title="Settings">
+                    <i class="fas fa-cog"></i>
+                </button>
+            </div>
+            <div class="header-title">
+                <img src="/icons/gen-alt-text.svg" alt="App Icon" class="app-icon">
+                <h1>Bluesky Alt Text Generator</h1>
+            </div>
+            <p class="subtitle">Automatically generate detailed alt text & captions for images & videos using Google Gemini AI.</p>
+        </header>
+
+        <main class="main-workflow">
+            <!-- Upload Section -->
+            <section class="upload-section" id="upload-section">
+                <div id="drop-area" class="upload-area">
+                    <div class="upload-icon">
+                        <i class="fas fa-photo-video"></i>
+                    </div>
+                    <h3>Upload Media</h3>
+                    <p class="upload-description">
+                        <strong>Supported:</strong> JPEG, PNG, GIF, WebP, MP4, WebM, MOV<br>
+                        <strong>Max size:</strong> 100MB
+                    </p>
+                    <div class="upload-actions">
+                        <button class="upload-btn" id="upload-button">
+                            <i class="fas fa-upload"></i> Choose File
+                        </button>
+                        <span class="upload-or">or drag & drop or paste from clipboard</span>
+                    </div>
+                    <input type="file" id="file-input" hidden accept="image/*,video/*">
+                </div>
+            </section>
+
+            <!-- Preview & Options Section -->
+            <section class="preview-section" id="preview-section" style="display: none;">
+                <div class="preview-container">
+                    <div class="preview-content" id="preview">
+                        <!-- Preview will be inserted here -->
+                    </div>
+                </div>
+                
+
+
+                <div class="action-buttons">
+                    <button id="generate-btn" class="generate-btn">
+                        <i class="fas fa-magic"></i>
+                        Generate
+                    </button>
+                    <button id="clear-btn" class="clear-btn">
+                        <i class="fas fa-times"></i>
+                        Clear
+                    </button>
+                </div>
+            </section>
+            
+            <!-- Processing Section -->
+            <section class="processing-section" id="processing-section" style="display: none;">
+                <div class="processing-container">
+                    <div class="processing-animation">
+                        <div class="processing-spinner"></div>
+                    </div>
+                    <div class="processing-progress">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progress-fill"></div>
+                        </div>
+                        <div class="progress-text" id="progress-text">Initializing...</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Results Section -->
+            <section class="results-section" id="results-section" style="display: none;">
+                <div class="results-container">
+                    <h2>Generated Alt Text</h2>
+                    <div class="alt-text-result" id="alt-text-result">
+                        <!-- Alt text will appear here -->
+                    </div>
+                    
+                    <div class="results-actions">
+                        <button id="copy-btn" class="copy-btn">
+                            <i class="fas fa-copy"></i>
+                            Copy to Clipboard
+                        </button>
+                        <button id="download-vtt-btn" class="download-btn" style="display: none;">
+                            <i class="fas fa-download"></i>
+                            Download Captions
+                        </button>
+                        <button id="download-compressed-btn" class="download-btn" style="display: none;">
+                            <i class="fas fa-download"></i>
+                            Download Compressed Video
+                        </button>
+                    </div>
+                    
+                    <button id="start-over-btn" class="start-over-btn">
+                        <i class="fas fa-redo"></i>
+                        Start Over
+                    </button>
+                </div>
+            </section>
+        </main>
+
+        <!-- Compact Status Bar -->
+        <div class="status-bar" id="status-bar">
+            <div class="status-indicator">
+                <div class="status-dot" id="status-dot"></div>
+                <span class="status-text" id="status-text">Ready to generate alt text</span>
+            </div>
+            <button id="view-logs-btn" class="logs-btn">
+                <i class="fas fa-list"></i>
+            </button>
+        </div>
+    </div>
+    
+    <footer>
+        <div class="footer-links">
+            <button id="pwa-install-btn" class="footer-link pwa-install-btn" style="display: none;">
+                <i class="fas fa-download"></i>
+                <div class="footer-link-text">
+                    <span class="footer-link-title">Web App</span>
+                    <span class="footer-link-desc">Add this page to your device as a progressive web app.</span>
+                </div>
+            </button>
+            <a href="https://chromewebstore.google.com/detail/bdgpkmjnfildfjhpjagjibfnfpdieddp" target="_blank" class="footer-link">
+                <i class="fab fa-chrome"></i>
+                <div class="footer-link-text">
+                    <span class="footer-link-title">Chrome Extension</span>
+                    <span class="footer-link-desc">Download the Extension from the Chrome Web Store.</span>
+                </div>
+            </a>
+            <a href="https://addons.mozilla.org/en-US/firefox/addon/bluesky-alt-text-generator/" target="_blank" class="footer-link">
+                <i class="fab fa-firefox-browser"></i>
+                <div class="footer-link-text">
+                    <span class="footer-link-title">Firefox Add-on</span>
+                    <span class="footer-link-desc">Download the Add-on for both desktop & Android.</span>
+                </div>
+            </a>
+            <a href="#" class="footer-link footer-link-disabled">
+                <i class="fab fa-safari"></i>
+                <div class="footer-link-text">
+                    <span class="footer-link-title">Safari Extension</span>
+                    <span class="footer-link-desc">Coming soon!</span>
+                </div>
+            </a>
+            <a href="https://github.com/symmetricalboy/gen-alt-text" target="_blank" class="footer-link">
+                <i class="fab fa-github"></i>
+                <div class="footer-link-text">
+                    <span class="footer-link-title">GitHub Repository</span>
+                    <span class="footer-link-desc">View the complete open source MIT licensed code.</span>
+                </div>
+            </a>
+            <a href="https://bsky.app/profile/symm.app" target="_blank" class="footer-link">
+                <i class="fab fa-bluesky"></i>
+                <div class="footer-link-text">
+                    <span class="footer-link-title">Help & Feedback</span>
+                    <span class="footer-link-desc">Visit @symm.app on Bluesky for assistance & updates.</span>
+                </div>
+            </a>
+        </div>
+        <div class="footer-info">
+            <p>Free & open source, for all, forever.</p>
+            <p>Copyright © 2025 Dylan Gregori Singer (symmetricalboy)</p>
+            <p><a href="/privacy" style="color: var(--primary-blue); text-decoration: none;">Privacy Policy</a></p>
+            <p class="app-version" id="app-version">v1.0.0</p>
+        </div>
+    </footer>
+
+    <!-- Logs Overlay -->
+    <div id="logs-overlay" class="logs-overlay" style="display: none;">
+        <div class="logs-modal">
+            <div class="logs-modal-header">
+                <h3>Processing Logs</h3>
+                <div class="logs-modal-actions">
+                    <button id="email-logs-btn" class="btn-secondary">
+                        <i class="fas fa-envelope"></i>
+                        Email logs to support
+                    </button>
+                    <button id="close-logs-btn" class="logs-close-btn">×</button>
+                </div>
+            </div>
+            <div class="logs-modal-content">
+                <div id="log-container" class="log-box"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Compression Warning Modal -->
+    <div id="compression-modal" class="modal-overlay" style="display: none;">
+        <div class="modal">
+            <button class="modal-close" id="modal-close">×</button>
+            <h3><i class="fas fa-compress-alt"></i> Large File Compression</h3>
+            <p>You've enabled compression preference for files larger than 20MB. This will compress your video locally before processing.</p>
+            <p><strong>Compression process:</strong></p>
+            <ul style="margin: 1rem 0; padding-left: 1.5rem; color: var(--text-secondary);">
+                <li>Happens entirely on your machine (private & secure)</li>
+                <li>May take 2-3 minutes for very large files</li>
+                <li>Reduces file size and upload time</li>
+                <li>You can save the compressed file afterwards</li>
+            </ul>
+            <p><strong>Alternative:</strong> You can disable compression in Settings to use our new Files API for faster processing of large files up to 100MB.</p>
+            <p>Ready to compress and continue?</p>
+            <div class="modal-checkbox">
+                <input type="checkbox" id="dont-show-again">
+                <label for="dont-show-again">Don't show this message again</label>
+            </div>
+            <div class="modal-buttons">
+                <button id="modal-cancel" class="btn-secondary">Cancel</button>
+                <button id="modal-continue" class="generate-btn">Continue</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Settings Overlay -->
+    <div id="settings-overlay" class="settings-overlay" style="display: none;">
+        <div class="settings-modal">
+            <div class="settings-modal-header">
+                <h3><i class="fas fa-cog"></i> Settings</h3>
+                <button id="close-settings-btn" class="settings-close-btn">×</button>
+            </div>
+            <div class="settings-modal-content">
+                <div class="settings-group">
+                    <h4>Processing Preferences</h4>
+                    <div class="setting-item">
+                        <label class="setting-toggle">
+                            <input type="checkbox" id="prefer-compression-toggle">
+                            <span class="setting-slider"></span>
+                        </label>
+                        <div class="setting-info">
+                            <span class="setting-title">Prefer Compression for Large Files</span>
+                            <span class="setting-description">For files >20MB: compress locally vs. upload directly using Files API. Compression reduces file size but takes longer.</span>
+                        </div>
+                    </div>
+                    <div class="setting-item">
+                        <label class="setting-checkbox">
+                            <input type="checkbox" id="dismiss-warning-checkbox">
+                            <span class="setting-checkmark"></span>
+                        </label>
+                        <div class="setting-info">
+                            <span class="setting-title">Dismiss Large File Warning</span>
+                            <span class="setting-description">Don't show compression warning for large files</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="settings-group">
+                    <h4>Theme Effects</h4>
+                    <div class="setting-item">
+                        <label class="setting-toggle">
+                            <input type="checkbox" id="sunlight-effect-toggle">
+                            <span class="setting-slider"></span>
+                        </label>
+                        <div class="setting-info">
+                            <span class="setting-title">Sunrise/Sunset Effect</span>
+                            <span class="setting-description">Beautiful, expressive color transitions when switching between light & dark themes</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="settings-group">
+                    <h4>Developer Settings</h4>
+                    <div class="setting-item">
+                        <label class="setting-toggle">
+                            <input type="checkbox" id="dev-server-toggle">
+                            <span class="setting-slider"></span>
+                        </label>
+                        <div class="setting-info">
+                            <span class="setting-title">Use Development Server</span>
+                            <span class="setting-description">⚠️ FOR DEVELOPERS ONLY - This will likely break the application for normal users! Only enable this if you're *very symmetrical*!</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Ko-fi Donation Link -->
+    <a href="https://ko-fi.com/symm" target="_blank" class="kofi-donation-link" title="Support this project on Ko-fi!">
+        <div class="kofi-icon-stack">
+            <i class="fas fa-mug-saucer kofi-mug"></i>
+            <i class="fas fa-heart kofi-heart"></i>
+        </div>
+    </a>
+
+    <div id="ffmpeg-status"></div>
+    <script>
+        // Self-contained theme toggle function to eliminate cache issues
+        function handleThemeToggle(checkbox) {
+            const isDark = checkbox.checked;
+            const theme = isDark ? 'dark' : 'light';
+            document.documentElement.setAttribute('data-theme', theme);
+            localStorage.setItem('theme', theme);
+        }
+        
+        // Initialize theme on load
+        function initTheme() {
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            const checkbox = document.getElementById('theme-toggle-checkbox');
+            if (checkbox) {
+                checkbox.checked = savedTheme === 'dark';
+                document.documentElement.setAttribute('data-theme', savedTheme);
+            }
+        }
+        
+        // Initialize immediately
+        document.addEventListener('DOMContentLoaded', initTheme);
+        
+        // Also try to initialize right away in case DOM is already loaded
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initTheme);
+        } else {
+            initTheme();
+        }
+    </script>
+    <script src="/assets/ffmpeg/ffmpeg.min.js"></script>
+    <script src="/js/main.js"></script>
+    <script>
+        // Development mode: Force cache clearing and fresh fetches
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', async () => {
+                try {
+                    // First, unregister all existing service workers
+                    const registrations = await navigator.serviceWorker.getRegistrations();
+                    for (let registration of registrations) {
+                        console.log('Unregistering service worker:', registration.scope);
+                        await registration.unregister();
+                    }
+                    
+                    // Clear all caches
+                    if ('caches' in window) {
+                        const cacheNames = await caches.keys();
+                        for (let cacheName of cacheNames) {
+                            console.log('Deleting cache:', cacheName);
+                            await caches.delete(cacheName);
+                        }
+                    }
+                    
+                    // Add cache-busting timestamp to all future requests
+                    const timestamp = Date.now();
+                    console.log('Cache bust timestamp:', timestamp);
+                    
+                    // Re-register service worker with cache-busting
+                    const registration = await navigator.serviceWorker.register(`/service-worker.js?v=${timestamp}`);
+                    console.log('ServiceWorker registration successful with scope:', registration.scope);
+                    
+                    // Force update
+                    await registration.update();
+                    
+                } catch (err) {
+                    console.log('ServiceWorker setup failed:', err);
+                }
+            });
+        }
+        
+        // Add cache-busting to all resource requests
+        window.addEventListener('beforeunload', () => {
+            // Clear any remaining caches on page unload
+            if ('caches' in window) {
+                caches.keys().then(cacheNames => {
+                    cacheNames.forEach(cacheName => {
+                        caches.delete(cacheName);
+                    });
+                });
+            }
+        });
+    </script>
+</body></html> 
